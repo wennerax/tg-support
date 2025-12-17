@@ -9,10 +9,9 @@ if (!token) {
 
 const bot = new Telegraf(token);
 
-const rawModerationChatId = "-1002485675560"; // ваш ID без -100
+const rawModerationChatId = "-1002485675560";
 const MODERATION_CHAT_ID = normalizeChatId(rawModerationChatId);
 
-// функция для автоматического добавления -100, если нужно
 function normalizeChatId(id) {
   const idStr = id.toString();
   if (idStr.startsWith('-100')) {
@@ -24,10 +23,7 @@ function normalizeChatId(id) {
   return `-100${idStr}`;
 }
 
-// Массив или Set для хранения заблокированных user_id
 const blockedUsers = new Set();
-
-// Карта для связи вопроса и пользователя
 const questionMap = new Map();
 
 bot.start((ctx) => {
@@ -41,7 +37,7 @@ bot.start((ctx) => {
 📩 *Жду твоего сообщения!*`, { parse_mode: 'Markdown' });
 });
 
-// Команда /ban
+// Обработка команд /ban и /unban (без изменений)
 bot.command('ban', async (ctx) => {
   if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) return;
 
@@ -68,7 +64,6 @@ bot.command('ban', async (ctx) => {
   ctx.reply(`Пользователь ${userIdentifier} заблокирован. Он больше не сможет задавать вопросы.`);
 });
 
-// Команда /unban
 bot.command('unban', async (ctx) => {
   if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) return;
 
@@ -99,11 +94,11 @@ bot.command('unban', async (ctx) => {
   }
 });
 
-// Обработка сообщений
+// Обработка текстовых сообщений и пересылка вопросов
 bot.on('message', async (ctx) => {
   const chatId = ctx.chat.id;
 
-  // 1. Если сообщение из чата модераторов — это ответ модератора
+  // Обработка ответов модераторов
   if (chatId === parseInt(MODERATION_CHAT_ID)) {
     const replyMsgId = ctx.message.reply_to_message?.message_id;
     if (!replyMsgId || !questionMap.has(replyMsgId)) {
@@ -124,16 +119,15 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // 2. Если пользователь заблокирован, игнорируем его вопросы
+  // Проверка, что пользователь не заблокирован
   const from = ctx.message.from;
   const userId = from.id.toString();
   if (blockedUsers.has(userId)) {
-    return; // игнорируем вопрос
+    return;
   }
 
-  // 3. Если сообщение из другого чата — это вопрос пользователя
+  // Пересылка вопроса в модерационный чат
   if (chatId !== parseInt(MODERATION_CHAT_ID)) {
-    const userId = from.id.toString();
     const username = from.username ? `@${from.username}` : '(без username)';
     const questionText = `❓ *Вопрос от пользователя ${userId} ${username}:*\n${ctx.message.text}`;
 
@@ -144,6 +138,25 @@ bot.on('message', async (ctx) => {
     } catch (err) {
       console.error('Ошибка при отправке вопроса:', err);
       ctx.reply('Произошла ошибка при отправке вопроса.');
+    }
+  }
+});
+
+// Обработка мультимедийных сообщений (стикеры, фото, видео, анимации)
+bot.on(['sticker', 'photo', 'animation', 'video'], async (ctx) => {
+  const chatId = ctx.chat.id;
+
+  if (chatId !== parseInt(MODERATION_CHAT_ID)) {
+    const messageId = ctx.message.message_id;
+
+    try {
+      await ctx.telegram.copyMessage(
+        MODERATION_CHAT_ID,
+        chatId,
+        messageId
+      );
+    } catch (err) {
+      console.error('Ошибка пересылки мультимедийного сообщения:', err);
     }
   }
 });
@@ -164,17 +177,14 @@ function run() {
 
 function keepAlive() {
   run();
-  // Здесь можно добавить запуск бота или других процессов
 }
 
-// Обработка необработанных ошибок
 process.on('uncaughtException', (error) => {
   console.error('Необработанное исключение:', error);
   console.log('Перезапускаем бота...');
   bot.launch().catch(err => console.error(err));
 });
 
-// Проверка состояния бота
 setInterval(() => {
   bot.telegram.getMe()
     .then(() => {
@@ -185,7 +195,7 @@ setInterval(() => {
       console.log('Перезапускаем бота...');
       bot.launch().catch(err => console.error(err));
     });
-}, 60000); // Проверка раз в минуту
+}, 60000);
 
 keepAlive();
 bot.launch().then(() => {
