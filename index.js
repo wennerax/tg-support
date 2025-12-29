@@ -37,7 +37,6 @@ bot.start((ctx) => {
 📩 *Жду твоего сообщения!*`, { parse_mode: 'Markdown' });
 });
 
-// Обработка команд /ban и /unban (без изменений)
 bot.command('ban', async (ctx) => {
   if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) return;
 
@@ -94,7 +93,6 @@ bot.command('unban', async (ctx) => {
   }
 });
 
-// Обработка текстовых сообщений и пересылка вопросов
 bot.on('message', async (ctx) => {
   const chatId = ctx.chat.id;
 
@@ -119,7 +117,6 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Проверка, что пользователь не заблокирован
   const from = ctx.message.from;
   const userId = from.id.toString();
   if (blockedUsers.has(userId)) {
@@ -142,7 +139,6 @@ bot.on('message', async (ctx) => {
   }
 });
 
-// Обработка мультимедийных сообщений (стикеры, фото, видео, анимации)
 bot.on(['sticker', 'photo', 'animation', 'video'], async (ctx) => {
   const chatId = ctx.chat.id;
 
