@@ -191,7 +191,7 @@ setInterval(() => {
       console.log('Перезапускаем бота...');
       bot.launch().catch(err => console.error(err));
     });
-}, 86400000);
+}, 3600000);
 
 keepAlive();
 bot.launch().then(() => {
