@@ -96,7 +96,6 @@ bot.command('unban', async (ctx) => {
 bot.on('message', async (ctx) => {
   const chatId = ctx.chat.id;
 
-  // Обработка ответов модераторов
   if (chatId === parseInt(MODERATION_CHAT_ID)) {
     const replyMsgId = ctx.message.reply_to_message?.message_id;
     if (!replyMsgId || !questionMap.has(replyMsgId)) {
@@ -123,7 +122,6 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Пересылка вопроса в модерационный чат
   if (chatId !== parseInt(MODERATION_CHAT_ID)) {
     const username = from.username ? `@${from.username}` : '(без username)';
     const questionText = `❓ *Вопрос от пользователя ${userId} ${username}:*\n${ctx.message.text}`;
