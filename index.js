@@ -9,7 +9,7 @@ if (!token) {
 
 const bot = new Telegraf(token);
 
-const rawModerationChatId = "-1002485675560";
+const rawModerationChatId = "-10024875560";
 const MODERATION_CHAT_ID = normalizeChatId(rawModerationChatId);
 
 function normalizeChatId(id) {
@@ -28,7 +28,7 @@ const questionMap = new Map();
 
 bot.start((ctx) => {
   ctx.reply(`
-✨ *Это — поддержка беседы "БРЕДИМ"* ✨
+✨ *Это — поддержка беседы "......."* ✨
 
 📝 Здесь ты можешь задать свой вопрос, а наши модераторы ответят в кратчайшие сроки.
 
