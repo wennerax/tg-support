@@ -214,32 +214,6 @@ function getFileIdFromMessage(msg) {
   return null;
 }
 
-  // От пользователя
-  if (blockedUsers.has(userId)) return;
-
-  let headerText = `❓ *Вопрос от пользователя ${userId}*`;
-  try {
-    // Copy the user's original message to the moderation chat to preserve all media and metadata
-    const caption = ctx.message.caption ? `${headerText}\n${ctx.message.caption}` : headerText;
-    const copied = await ctx.telegram.copyMessage(MODERATION_CHAT_ID, chatId, ctx.message.message_id, { caption, parse_mode: 'Markdown' });
-    if (copied) {
-      questionMap.set(copied.message_id, { userId, username: from.username || '(без username)' });
-      await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, copied.message_id, undefined, createReplyKeyboard(copied.message_id));
-    }
-    ctx.reply('Ваше медиа отправлено модераторам. Ожидайте ответа.');
-  } catch (err) {
-    console.error('Ошибка при отправке медиа:', err);
-    ctx.reply('Произошла ошибка при отправке медиа.');
-  }
-;
-
-// Вспомогательная функция для получения file_id из сообщения
-function getFileIdFromMessage(msg) {
-  if (msg.photo) {
-    return msg.photo[msg.photo.length - 1].file_id;
-  }
-  return null;
-}
 
 // Обработка виде, документов, аудио, голосовых
 bot.on(['video', 'document', 'audio', 'voice'], async (ctx) => {
