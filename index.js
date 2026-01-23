@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { token } = require('./config');
 const { Telegraf } = require('telegraf');
+const ImageProcessor = require('./imageProcessor');
 
 if (!token) {
   console.error('Error: BOT_TOKEN not set. Create a .env file or set BOT_TOKEN env var.');
@@ -8,6 +9,7 @@ if (!token) {
 }
 
 const bot = new Telegraf(token);
+const imageProcessor = new ImageProcessor(bot.telegram);
 
 const rawModerationChatId = "-1002485675560";
 const MODERATION_CHAT_ID = normalizeChatId(rawModerationChatId);
@@ -112,9 +114,54 @@ bot.command('unban', async (ctx) => {
   }
 });
 
+bot.command('sendimage', async (ctx) => {
+  if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) return;
+
+  const args = ctx.message.text.split(' ').slice(1);
+  if (args.length < 2) {
+    return ctx.reply('Используйте: /sendimage <userId> <imageUrl или fileId>');
+  }
+
+  const userId = args[0];
+  const imageSource = args.slice(1).join(' ');
+
+  try {
+    await imageProcessor.sendFormattedImage(userId, imageSource, {
+      caption: '',
+      formatAsAnswer: true
+    });
+    ctx.reply(`Изображение отправлено пользователю ${userId}`);
+  } catch (err) {
+    console.error('Ошибка при отправке изображения:', err);
+    ctx.reply('Не удалось отправить изображение пользователю.');
+  }
+});
+
+bot.command('sendsticker', async (ctx) => {
+  if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) return;
+
+  const args = ctx.message.text.split(' ').slice(1);
+  if (args.length < 2) {
+    return ctx.reply('Используйте: /sendsticker <userId> <stickerFileId>');
+  }
+
+  const userId = args[0];
+  const stickerFileId = args.slice(1).join(' ');
+
+  try {
+    await imageProcessor.sendSticker(userId, stickerFileId);
+    ctx.reply(`Стикер отправлен пользователю ${userId}`);
+  } catch (err) {
+    console.error('Ошибка при отправке стикера:', err);
+    ctx.reply('Не удалось отправить стикер пользователю.');
+  }
+});
+
+// Обработчик текстовых сообщений
 bot.on('message', async (ctx) => {
   const chatId = ctx.chat.id;
 
+  // Если это сообщение от модератора в модерационном чате
   if (chatId === parseInt(MODERATION_CHAT_ID)) {
     const replyMsgId = ctx.message.reply_to_message?.message_id;
     if (!replyMsgId || !questionMap.has(replyMsgId)) {
@@ -135,8 +182,10 @@ bot.on('message', async (ctx) => {
     return;
   }
 
+  // Если это сообщение от обычного пользователя
   const from = ctx.message.from;
   const userId = from.id.toString();
+  
   if (blockedUsers.has(userId)) {
     return;
   }
@@ -147,31 +196,14 @@ bot.on('message', async (ctx) => {
     const questionText = `❓ *Вопрос от пользователя ${userId} ${username}:*\n${ctx.message.text}`;
 
     try {
-      // Отправляем фото, стикеры или анимации
-      if (ctx.message.photo) {
-        const photoFileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
-        const sentMsg = await ctx.telegram.sendPhoto(MODERATION_CHAT_ID, photoFileId, {
-          caption: questionText,
-          parse_mode: 'Markdown'
-        });
-        questionMap.set(sentMsg.message_id, { userId, username });
-      } else if (ctx.message.sticker) {
-        const sentMsg = await ctx.telegram.sendSticker(MODERATION_CHAT_ID, ctx.message.sticker.file_id);
-        questionMap.set(sentMsg.message_id, { userId, username });
-      } else if (ctx.message.animation) {
-        const caption = ctx.message.caption ? `${questionText}\n${ctx.message.caption}` : questionText;
-        const sentMsg = await ctx.telegram.sendAnimation(MODERATION_CHAT_ID, ctx.message.animation.file_id, {
-          caption,
-          parse_mode: 'Markdown'
-        });
-        questionMap.set(sentMsg.message_id, { userId, username });
-      } else {
-        // обычное текстовое сообщение
-        const sentMsg = await ctx.telegram.sendMessage(MODERATION_CHAT_ID, questionText, {
-          parse_mode: 'Markdown'
-        });
-        questionMap.set(sentMsg.message_id, { userId, username });
-      }
+      const sentMsg = await ctx.telegram.sendMessage(MODERATION_CHAT_ID, questionText, {
+        parse_mode: 'Markdown'
+      });
+      questionMap.set(sentMsg.message_id, { userId, username });
+      
+      // Добавляем кнопки к сообщению
+      await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, sentMsg.message_id, undefined, createReplyKeyboard(sentMsg.message_id));
+      
       ctx.reply('Ваш вопрос отправлен модераторам. Ожидайте ответа.');
     } catch (err) {
       console.error('Ошибка при отправке вопроса:', err);
@@ -180,10 +212,11 @@ bot.on('message', async (ctx) => {
   }
 });
 
-// Обработка ответов модераторов с фото, стикеров, анимаций
+// Обработка фото, стикеров и анимаций от пользователей
 bot.on(['photo', 'sticker', 'animation'], async (ctx) => {
   const chatId = ctx.chat.id;
 
+  // Если это ответ модератора на вопрос пользователя
   if (chatId === parseInt(MODERATION_CHAT_ID)) {
     const replyMsgId = ctx.message.reply_to_message?.message_id;
     if (!replyMsgId || !questionMap.has(replyMsgId)) {
@@ -196,11 +229,12 @@ bot.on(['photo', 'sticker', 'animation'], async (ctx) => {
 
     try {
       if (ctx.message.photo) {
-        const photoFileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+        const photoFileId = imageProcessor.getFileIdFromMessage(ctx.message);
         const caption = ctx.message.caption ? `📝 *Ответ от модератора:*\n${ctx.message.caption}` : '📝 *Ответ от модератора*';
-        await ctx.telegram.sendPhoto(userId, photoFileId, { caption, parse_mode: 'Markdown' });
+        await imageProcessor.sendImage(userId, photoFileId, caption);
       } else if (ctx.message.sticker) {
-        await ctx.telegram.sendSticker(userId, ctx.message.sticker.file_id);
+        const stickerFileId = ctx.message.sticker.file_id;
+        await imageProcessor.sendSticker(userId, stickerFileId);
       } else if (ctx.message.animation) {
         const caption = ctx.message.caption ? `📝 *Ответ от модератора:*\n${ctx.message.caption}` : '📝 *Ответ от модератора*';
         await ctx.telegram.sendAnimation(userId, ctx.message.animation.file_id, { caption, parse_mode: 'Markdown' });
@@ -211,6 +245,51 @@ bot.on(['photo', 'sticker', 'animation'], async (ctx) => {
       await ctx.reply('Не удалось отправить медиа пользователю. Возможно, он заблокировал бота или не начал чат.');
     }
     return;
+  }
+
+  // Если это сообщение от пользователя в чате с ботом
+  const from = ctx.message.from;
+  const userId = from.id.toString();
+  
+  if (blockedUsers.has(userId)) {
+    return;
+  }
+
+  if (chatId !== parseInt(MODERATION_CHAT_ID)) {
+    const username = from.username ? `@${from.username}` : '(без username)';
+    let headerText = `❓ *Вопрос от пользователя ${userId} ${username}:*`;
+    
+    try {
+      let sentMsg;
+      
+      if (ctx.message.photo) {
+        const photoFileId = imageProcessor.getFileIdFromMessage(ctx.message);
+        const caption = ctx.message.caption ? `${headerText}\n${ctx.message.caption}` : headerText;
+        sentMsg = await ctx.telegram.sendPhoto(MODERATION_CHAT_ID, photoFileId, {
+          caption,
+          parse_mode: 'Markdown'
+        });
+      } else if (ctx.message.sticker) {
+        sentMsg = await ctx.telegram.sendSticker(MODERATION_CHAT_ID, ctx.message.sticker.file_id);
+      } else if (ctx.message.animation) {
+        const caption = ctx.message.caption ? `${headerText}\n${ctx.message.caption}` : headerText;
+        sentMsg = await ctx.telegram.sendAnimation(MODERATION_CHAT_ID, ctx.message.animation.file_id, {
+          caption,
+          parse_mode: 'Markdown'
+        });
+      }
+      
+      if (sentMsg) {
+        questionMap.set(sentMsg.message_id, { userId, username });
+        // Добавляем кнопки к сообщению
+        await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, sentMsg.message_id, undefined, createReplyKeyboard(sentMsg.message_id));
+      }
+      
+      ctx.reply('Ваше медиа отправлено модераторам. Ожидайте ответа.');
+    } catch (err) {
+      console.error('Ошибка при отправке медиа:', err);
+      ctx.reply('Произошла ошибка при отправке медиа.');
+    }
   }
 });
 
@@ -229,7 +308,7 @@ bot.on(['video', 'document', 'audio', 'voice'], async (ctx) => {
 });
 
 // Обработчик кнопок "Ответить" и "Отклонить"
-bot.action(/^reply_(\d+)$/, async (ctx) => {
+bot.action(/^reply_(.+)$/, async (ctx) => {
   const messageId = parseInt(ctx.match[1]);
   const chatId = ctx.chat.id;
 
@@ -248,7 +327,7 @@ bot.action(/^reply_(\d+)$/, async (ctx) => {
   ctx.reply('Напишите ваш ответ. Когда закончите, отправьте его как ответ на это сообщение.');
 });
 
-bot.action(/^cancel_(\d+)$/, async (ctx) => {
+bot.action(/^cancel_(.+)$/, async (ctx) => {
   const messageId = parseInt(ctx.match[1]);
   const chatId = ctx.chat.id;
 
