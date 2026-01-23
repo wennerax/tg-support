@@ -25,11 +25,10 @@ function normalizeChatId(id) {
 
 const blockedUsers = new Set();
 const questionMap = new Map();
-const replyContextMap = new Map(); // Stores user info for reply callbacks
 
 bot.start((ctx) => {
   ctx.reply(`
-✨ *Это — поддержка беседы "БРЕДИМ"* ✨
+✨ *Это — поддержка беседы "......."* ✨
 
 📝 Здесь ты можешь задать свой вопрос, а наши модераторы ответят в кратчайшие сроки.
 
@@ -94,67 +93,9 @@ bot.command('unban', async (ctx) => {
   }
 });
 
-bot.action(/reply_(.+)/, async (ctx) => {
-  const userId = ctx.match[1];
-  
-  if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) {
-    return ctx.answerCbQuery('❌ Эта команда доступна только в модерационном чате');
-  }
-
-  replyContextMap.set(ctx.from.id, { userId, messageId: ctx.callbackQuery.message.message_id });
-  
-  ctx.answerCbQuery('✅ Режим ответа активирован. Отправьте ваш ответ.');
-  ctx.reply(`Напишите ответ для пользователя ${userId}. Я отправлю это сообщение ему.\n\nИспользуйте /cancel для отмены.`);
-});
-
-bot.action(/cancel_(.+)/, async (ctx) => {
-  const messageId = ctx.match[1];
-  
-  if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) {
-    return ctx.answerCbQuery('❌ Эта команда доступна только в модерационном чате');
-  }
-
-  try {
-    // Delete the question message
-    await ctx.telegram.deleteMessage(MODERATION_CHAT_ID, messageId);
-    ctx.answerCbQuery('✅ Вопрос отменён и удалён.');
-    
-    // Remove from questionMap
-    questionMap.delete(parseInt(messageId));
-  } catch (err) {
-    console.error('Ошибка при удалении сообщения:', err);
-    ctx.answerCbQuery('❌ Не удалось удалить вопрос.');
-  }
-});
-
-bot.command('cancel', async (ctx) => {
-  if (replyContextMap.has(ctx.from.id)) {
-    replyContextMap.delete(ctx.from.id);
-    ctx.reply('✅ Режим ответа отменён.');
-  } else {
-    ctx.reply('Вы не в режиме ответа.');
-  }
-});
-
 bot.on('message', async (ctx) => {
   const chatId = ctx.chat.id;
 
-  // Обработка ответов модераторов в режиме ответа
-  if (chatId === parseInt(MODERATION_CHAT_ID) && replyContextMap.has(ctx.from.id)) {
-    const { userId } = replyContextMap.get(ctx.from.id);
-    
-    try {
-      await ctx.telegram.sendMessage(userId, `📝 *Ответ от модератора:*\n${ctx.message.text}`, { parse_mode: 'Markdown' });
-      ctx.reply(`✅ Ответ отправлен пользователю ${userId}`);
-      replyContextMap.delete(ctx.from.id);
-    } catch (err) {
-      console.error('Ошибка при отправке сообщения пользователю:', err);
-      ctx.reply('❌ Не удалось отправить сообщение пользователю. Возможно, он заблокировал бота или не начал чат.');
-    }
-    return;
-  }
-
-  // Обработка ответов модераторов через reply (старый способ)
   if (chatId === parseInt(MODERATION_CHAT_ID)) {
     const replyMsgId = ctx.message.reply_to_message?.message_id;
     if (!replyMsgId || !questionMap.has(replyMsgId)) {
@@ -181,84 +122,35 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Пересылка вопроса в модерационный чат
   if (chatId !== parseInt(MODERATION_CHAT_ID)) {
     const username = from.username ? `@${from.username}` : '(без username)';
     const questionText = `❓ *Вопрос от пользователя ${userId} ${username}:*\n${ctx.message.text}`;
 
     try {
-      const sentMsg = await ctx.telegram.sendMessage(MODERATION_CHAT_ID, questionText, 
-        { 
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: '💬 Ответить',
-                  callback_data: `reply_${userId}`
-                },
-                {
-                  text: '❌ Отменить',
-                  callback_data: `cancel_${sentMsg.message_id}`
-                }
-              ]
-            ]
-          }
-        }
-      );
+      const sentMsg = await ctx.telegram.sendMessage(MODERATION_CHAT_ID, questionText, { parse_mode: 'Markdown' });
       questionMap.set(sentMsg.message_id, { userId, username });
-      ctx.reply('✅ Ваш вопрос отправлен модераторам. Ожидайте ответа.');
+      ctx.reply('Ваш вопрос отправлен модераторам. Ожидайте ответа.');
     } catch (err) {
       console.error('Ошибка при отправке вопроса:', err);
-      ctx.reply('❌ Произошла ошибка при отправке вопроса.');
+      ctx.reply('Произошла ошибка при отправке вопроса.');
     }
   }
 });
 
 bot.on(['sticker', 'photo', 'animation', 'video'], async (ctx) => {
   const chatId = ctx.chat.id;
-  const messageType = ctx.message.sticker ? 'стикер' : ctx.message.photo ? 'фото' : ctx.message.animation ? 'GIF' : 'видео';
 
-  // Обработка ответов модераторов в режиме ответа (отправка медиа пользователю)
-  if (chatId === parseInt(MODERATION_CHAT_ID) && replyContextMap.has(ctx.from.id)) {
-    const { userId } = replyContextMap.get(ctx.from.id);
-    
-    try {
-      const messageId = ctx.message.message_id;
-      await ctx.telegram.copyMessage(userId, MODERATION_CHAT_ID, messageId);
-      ctx.reply(`✅ ${messageType.charAt(0).toUpperCase() + messageType.slice(1)} отправлено пользователю ${userId}`);
-      replyContextMap.delete(ctx.from.id);
-    } catch (err) {
-      console.error('Ошибка при отправке медиа пользователю:', err);
-      ctx.reply('❌ Не удалось отправить медиа пользователю.');
-    }
-    return;
-  }
-
-  // Пересылка медиа от пользователя в модерационный чат
   if (chatId !== parseInt(MODERATION_CHAT_ID)) {
     const messageId = ctx.message.message_id;
-    const from = ctx.message.from;
-    const userId = from.id.toString();
-    
-    if (blockedUsers.has(userId)) {
-      return;
-    }
 
     try {
-      const username = from.username ? `@${from.username}` : '(без username)';
-      const caption = `📎 *${messageType.charAt(0).toUpperCase() + messageType.slice(1)} от пользователя ${userId} ${username}*`;
-      
       await ctx.telegram.copyMessage(
         MODERATION_CHAT_ID,
         chatId,
-        messageId,
-        { caption, parse_mode: 'Markdown' }
+        messageId
       );
-      ctx.reply(`✅ Ваше ${messageType} отправлено модераторам.`);
     } catch (err) {
       console.error('Ошибка пересылки мультимедийного сообщения:', err);
-      ctx.reply(`❌ Не удалось отправить ${messageType} модераторам.`);
     }
   }
 });
