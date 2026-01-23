@@ -39,7 +39,7 @@ function createReplyKeyboard(messageId) {
 
 // Старт
 bot.start((ctx) => {
-  ctx.reply(`✨ *Это — поддержка беседы "БРЕДИМ"* ✨
+  ctx.reply(`✨ *Это — поддержка беседы "......."* ✨
 
 📝 Здесь ты можешь задать свой вопрос, а наши модераторы ответят в кратчайшие сроки.
 
@@ -104,42 +104,6 @@ bot.command('unban', async (ctx) => {
   }
 });
 
-// /sendimage
-bot.command('sendimage', async (ctx) => {
-  if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) return;
-  const args = ctx.message.text.split(' ').slice(1);
-  if (args.length < 2) {
-    return ctx.reply('Используйте: /sendimage <userId> <imageUrl или fileId>');
-  }
-  const userId = args[0];
-  const imageSource = args.slice(1).join(' ');
-  try {
-    // Send as document (preserve quality) if possible
-    await ctx.telegram.sendDocument(userId, imageSource, { caption: '', parse_mode: 'Markdown' });
-    ctx.reply(`Изображение отправлено пользователю ${userId}`);
-  } catch (err) {
-    console.error('Ошибка при отправке изображения:', err);
-    ctx.reply('Не удалось отправить изображение пользователю.');
-  }
-});
-
-// /sendsticker
-bot.command('sendsticker', async (ctx) => {
-  if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) return;
-  const args = ctx.message.text.split(' ').slice(1);
-  if (args.length < 2) {
-    return ctx.reply('Используйте: /sendsticker <userId> <stickerFileId>');
-  }
-  const userId = args[0];
-  const stickerFileId = args.slice(1).join(' ');
-  try {
-    await ctx.telegram.sendSticker(userId, stickerFileId);
-    ctx.reply(`Стикер отправлен пользователю ${userId}`);
-  } catch (err) {
-    console.error('Ошибка при отправке стикера:', err);
-    ctx.reply('Не удалось отправить стикер пользователю.');
-  }
-});
 
 // Обработка сообщений от пользователей
 bot.on('message', async (ctx) => {
@@ -183,12 +147,12 @@ bot.on('message', async (ctx) => {
   }
 });
 
-// Обработка фото, стикеров, анимаций
+// Обработка фото, стикеров, анимаций (ответы модератора и сообщения пользователей)
 bot.on(['photo', 'sticker', 'animation'], async (ctx) => {
   const chatId = ctx.chat.id;
 
   if (chatId === parseInt(MODERATION_CHAT_ID)) {
-    // Ответ модератора
+    // Ответ модератора с медиа
     const replyMsgId = ctx.message.reply_to_message?.message_id;
     if (!replyMsgId || !questionMap.has(replyMsgId)) {
       await ctx.reply('Пожалуйста, отвечайте на сообщение, содержащее вопрос, используя reply.');
@@ -196,8 +160,11 @@ bot.on(['photo', 'sticker', 'animation'], async (ctx) => {
     }
     const { userId, username } = questionMap.get(replyMsgId);
     try {
-      // Copy the moderation message (with media) to the user to preserve original file
-      await ctx.telegram.copyMessage(userId, MODERATION_CHAT_ID, replyMsgId, { caption: '📝 *Ответ от модератора*', parse_mode: 'Markdown' });
+      // Пересылаем оригинальное медиа пользователю
+      await ctx.telegram.copyMessage(userId, MODERATION_CHAT_ID, replyMsgId, {
+        caption: '📝 *Ответ от модератора*',
+        parse_mode: 'Markdown'
+      });
       await ctx.reply(`Медиа отправлены пользователю ${userId} (${username})`);
     } catch (err) {
       console.error('Ошибка при отправке медиа:', err);
@@ -205,6 +172,47 @@ bot.on(['photo', 'sticker', 'animation'], async (ctx) => {
     }
     return;
   }
+
+  // От пользователя: пересылаем оригинальный файл в модерацию
+  const from = ctx.message.from;
+  const userId = from.id.toString();
+
+  if (blockedUsers.has(userId)) return;
+
+  try {
+    // Пересылаем сообщение целиком (все media сохранятся)
+    const copiedMsg = await ctx.telegram.copyMessage(
+      MODERATION_CHAT_ID,
+      ctx.chat.id,
+      ctx.message.message_id,
+      {
+        caption: ctx.message.caption ? `❓ *Вопрос от пользователя ${userId}*: \n${ctx.message.caption}` : `❓ *Вопрос от пользователя ${userId}*`,
+        parse_mode: 'Markdown'
+      }
+    );
+    if (copiedMsg) {
+      questionMap.set(copiedMsg.message_id, { userId, username: from.username || '(без username)' });
+      await ctx.telegram.editMessageReplyMarkup(
+        MODERATION_CHAT_ID,
+        copiedMsg.message_id,
+        undefined,
+        createReplyKeyboard(copiedMsg.message_id)
+      );
+    }
+    ctx.reply('Ваше медиа отправлено модераторам. Ожидайте ответа.');
+  } catch (err) {
+    console.error('Ошибка при пересылке мультимедиа:', err);
+    ctx.reply('Произошла ошибка при отправке медиа.');
+  }
+});
+
+// Вспомогательная функция для получения file_id
+function getFileIdFromMessage(msg) {
+  if (msg.photo) {
+    return msg.photo[msg.photo.length - 1].file_id;
+  }
+  return null;
+}
 
   // От пользователя
   if (blockedUsers.has(userId)) return;
@@ -223,7 +231,7 @@ bot.on(['photo', 'sticker', 'animation'], async (ctx) => {
     console.error('Ошибка при отправке медиа:', err);
     ctx.reply('Произошла ошибка при отправке медиа.');
   }
-});
+;
 
 // Вспомогательная функция для получения file_id из сообщения
 function getFileIdFromMessage(msg) {
