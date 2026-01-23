@@ -9,7 +9,7 @@ if (!token) {
 
 const bot = new Telegraf(token);
 
-const rawModerationChatId = "-1002485675560";
+const rawModerationChatId = "-1003691307198";
 const MODERATION_CHAT_ID = normalizeChatId(rawModerationChatId);
 
 function normalizeChatId(id) {
