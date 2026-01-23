@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { token } = require('./config');
 const { Telegraf } = require('telegraf');
+const ImageProcessor = require('./imageProcessor');
 
 if (!token) {
   console.error('Error: BOT_TOKEN not set. Create a .env file or set BOT_TOKEN env var.');
@@ -8,6 +9,7 @@ if (!token) {
 }
 
 const bot = new Telegraf(token);
+const imageProcessor = new ImageProcessor(bot.telegram);
 
 const rawModerationChatId = "-1003691307198";
 const MODERATION_CHAT_ID = normalizeChatId(rawModerationChatId);
@@ -112,7 +114,7 @@ bot.command('sendimage', async (ctx) => {
   const userId = args[0];
   const imageSource = args.slice(1).join(' ');
   try {
-    await ctx.telegram.sendDocument(userId, imageSource, { caption: '', parse_mode: 'Markdown' });
+    await imageProcessor.sendFormattedImage(userId, imageSource, { caption: '', formatAsAnswer: true });
     ctx.reply(`Изображение отправлено пользователю ${userId}`);
   } catch (err) {
     console.error('Ошибка при отправке изображения:', err);
@@ -130,7 +132,7 @@ bot.command('sendsticker', async (ctx) => {
   const userId = args[0];
   const stickerFileId = args.slice(1).join(' ');
   try {
-    await ctx.telegram.sendSticker(userId, stickerFileId);
+    await imageProcessor.sendSticker(userId, stickerFileId);
     ctx.reply(`Стикер отправлен пользователю ${userId}`);
   } catch (err) {
     console.error('Ошибка при отправке стикера:', err);
@@ -162,6 +164,7 @@ bot.on('message', async (ctx) => {
     return;
   }
 
+  // Пользовательский вопрос
   if (blockedUsers.has(userId)) return;
 
   if (chatId !== parseInt(MODERATION_CHAT_ID)) {
@@ -192,11 +195,14 @@ bot.on(['photo', 'sticker', 'animation'], async (ctx) => {
     }
     const { userId, username } = questionMap.get(replyMsgId);
     try {
-      // Пересылаем оригинальное медиа пользователю
-      await ctx.telegram.copyMessage(userId, MODERATION_CHAT_ID, replyMsgId, {
-        caption: '📝 *Ответ от модератора*',
-        parse_mode: 'Markdown'
-      });
+      if (ctx.message.photo) {
+        const fileId = getFileIdFromMessage(ctx.message);
+        await imageProcessor.sendImage(userId, fileId, '📝 *Ответ от модератора*');
+      } else if (ctx.message.sticker) {
+        await imageProcessor.sendSticker(userId, ctx.message.sticker.file_id);
+      } else if (ctx.message.animation) {
+        await ctx.telegram.sendAnimation(userId, ctx.message.animation.file_id, { caption: '📝 *Ответ от модератора*', parse_mode: 'Markdown' });
+      }
       await ctx.reply(`Медиа отправлены пользователю ${userId} (${username})`);
     } catch (err) {
       console.error('Ошибка при отправке медиа:', err);
@@ -210,11 +216,20 @@ bot.on(['photo', 'sticker', 'animation'], async (ctx) => {
 
   let headerText = `❓ *Вопрос от пользователя ${userId}*`;
   try {
-    const caption = ctx.message.caption ? `${headerText}\n${ctx.message.caption}` : headerText;
-    const copied = await ctx.telegram.copyMessage(MODERATION_CHAT_ID, chatId, ctx.message.message_id, { caption, parse_mode: 'Markdown' });
-    if (copied) {
-      questionMap.set(copied.message_id, { userId, username: from.username || '(без username)' });
-      await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, copied.message_id, undefined, createReplyKeyboard(copied.message_id));
+    let sentMsg;
+    if (ctx.message.photo) {
+      const fileId = getFileIdFromMessage(ctx.message);
+      const caption = ctx.message.caption ? `${headerText}\n${ctx.message.caption}` : headerText;
+      sentMsg = await ctx.telegram.sendPhoto(MODERATION_CHAT_ID, fileId, { caption, parse_mode: 'Markdown' });
+    } else if (ctx.message.sticker) {
+      sentMsg = await ctx.telegram.sendSticker(MODERATION_CHAT_ID, ctx.message.sticker.file_id);
+    } else if (ctx.message.animation) {
+      const caption = ctx.message.caption ? `${headerText}\n${ctx.message.caption}` : headerText;
+      sentMsg = await ctx.telegram.sendAnimation(MODERATION_CHAT_ID, ctx.message.animation.file_id, { caption, parse_mode: 'Markdown' });
+    }
+    if (sentMsg) {
+      questionMap.set(sentMsg.message_id, { userId, username: from.username || '(без username)' });
+      await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, sentMsg.message_id, undefined, createReplyKeyboard(sentMsg.message_id));
     }
     ctx.reply('Ваше медиа отправлено модераторам. Ожидайте ответа.');
   } catch (err) {
@@ -313,7 +328,6 @@ function keepAlive() {
   run();
 }
 
-// Перезапуск при необходимости
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err);
   console.log('Перезапускаем бота...');
