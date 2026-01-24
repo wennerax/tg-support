@@ -185,10 +185,26 @@ bot.on('message', async (ctx) => {
     const username = from.username ? `@${from.username}` : '(без username)';
     const questionText = `❓ *Вопрос от пользователя ${userId} ${username}:*\n${ctx.message.text}`;
 
+    let sentMsg;
     try {
-      const sentMsg = await ctx.telegram.sendMessage(MODERATION_CHAT_ID, questionText, { 
+      sentMsg = await ctx.telegram.sendMessage(MODERATION_CHAT_ID, questionText, { 
         parse_mode: 'Markdown',
         reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '💬 Ответить', callback_data: `reply_PLACEHOLDER` },
+              { text: '✅ Принять', callback_data: `accept_PLACEHOLDER` },
+              { text: '❌ Отклонить', callback_data: `reject_PLACEHOLDER` }
+            ]
+          ]
+        }
+      });
+      // После отправки сообщения, обновляем кнопки с правильным message_id
+      await ctx.telegram.editMessageReplyMarkup(
+        MODERATION_CHAT_ID,
+        sentMsg.message_id,
+        undefined,
+        {
           inline_keyboard: [
             [
               { text: '💬 Ответить', callback_data: `reply_${sentMsg.message_id}` },
@@ -197,7 +213,7 @@ bot.on('message', async (ctx) => {
             ]
           ]
         }
-      });
+      );
       questionMap.set(sentMsg.message_id, { userId, username });
       ctx.reply('Ваш вопрос отправлен модераторам. Ожидайте ответа.');
     } catch (err) {
