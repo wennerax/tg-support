@@ -187,19 +187,8 @@ bot.on('message', async (ctx) => {
   }
 });
 
-// Обработка фото, стикеров, анимаций, видео, документов, аудио, голосовых
-// (Handled by mediaHandler.js)
-
-// Вспомогательная функция для получения file_id из сообщения
-function getFileIdFromMessage(msg) {
-  if (msg.photo) {
-    return msg.photo[msg.photo.length - 1].file_id;
-  }
-  return null;
-}
-
-// Обработка виде, документов, аудио, голосовых
-// (Handled by mediaHandler.js)
+// Media and sticker forwarding handled by mediaHandler.js
+// All photo, sticker, animation, video, audio, voice, and document messages are processed there
 
 // Обработка кнопок "Ответить" и "Отклонить"
 bot.action(/^reply_(\d+)$/, async (ctx) => {
@@ -214,7 +203,8 @@ bot.action(/^reply_(\d+)$/, async (ctx) => {
     return;
   }
   replySessions.set(ctx.from.id, messageId);
-  await ctx.answerCbQuery();
+  await ctx.answerCbQuery('Теперь напишите ответ и отправьте его.');
+  ctx.reply('Напишите ваш ответ. После этого он будет отправлен пользователю.');
 });
 
 // Обработка кнопки "Отклонить"
@@ -229,7 +219,17 @@ bot.action(/^cancel_(\d+)$/, async (ctx) => {
     await ctx.answerCbQuery('Вопрос уже обработан или не найден.', true);
     return;
   }
+  
+  const { userId, username } = questionMap.get(messageId);
   questionMap.delete(messageId);
+  
+  try {
+    // Send rejection message to the user
+    await ctx.telegram.sendMessage(userId, '❌ *К сожалению, ваш вопрос был отклонен.*\n\nПожалуйста, свяжитесь с администрацией, если у вас есть вопросы.', { parse_mode: 'Markdown' });
+  } catch (err) {
+    console.error('Ошибка при отправке уведомления об отклонении:', err);
+  }
+  
   await ctx.editMessageReplyMarkup(undefined);
   await ctx.answerCbQuery('Вопрос отклонен.');
 });
