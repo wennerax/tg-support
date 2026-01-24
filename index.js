@@ -218,7 +218,7 @@ bot.on(['photo', 'animation', 'video', 'document', 'sticker'], async (ctx) => {
 
     try {
       // Копируем сообщение с медиа пользователю
-      await ctx.telegram.copyMessage(userId, chatId, ctx.message.message_id);
+      const result = await ctx.telegram.copyMessage(userId, chatId, ctx.message.message_id);
       await ctx.reply(`✅ Ответ отправлен пользователю ${userId} ${username}`);
       moderatorReplyState.delete(moderatorId);
       
@@ -243,7 +243,7 @@ bot.on(['photo', 'animation', 'video', 'document', 'sticker'], async (ctx) => {
       console.log(`Отправляем медиа ответ пользователю ${userId} (${username})`);
 
       try {
-        await ctx.telegram.copyMessage(userId, chatId, ctx.message.message_id);
+        const result = await ctx.telegram.copyMessage(userId, chatId, ctx.message.message_id);
         await ctx.reply(`Медиа отправлено пользователю ${userId} ${username}`);
       } catch (err) {
         console.error('Ошибка при отправке медиа пользователю:', err);
@@ -267,14 +267,15 @@ bot.on(['photo', 'animation', 'video', 'document', 'sticker'], async (ctx) => {
     
     let mediaLabel = '📎 Файл';
     if (ctx.message.photo) mediaLabel = '📸 Изображение';
-    else if (ctx.message.animation) mediaLabel = '🎬 Гиф';
+    else if (ctx.message.animation) mediaLabel = '🎬 Гифка';
     else if (ctx.message.video) mediaLabel = '🎥 Видео';
     else if (ctx.message.sticker) mediaLabel = '👾 Стикер';
-    
+    else if (ctx.message.document) mediaLabel = '📄 Документ';
+
     const headerText = `${mediaLabel} *от пользователя ${userId} ${username}:*`;
 
     try {
-      const copiedMsg = await ctx.telegram.copyMessage(
+      const result = await ctx.telegram.copyMessage(
         MODERATION_CHAT_ID,
         chatId,
         ctx.message.message_id,
@@ -284,24 +285,22 @@ bot.on(['photo', 'animation', 'video', 'document', 'sticker'], async (ctx) => {
           reply_markup: {
             inline_keyboard: [
               [
-                { text: '💬 Ответить', callback_data: `reply_${copiedMsg.message_id}` },
-                { text: '✅ Принять', callback_data: `accept_${copiedMsg.message_id}` },
-                { text: '❌ Отклонить', callback_data: `reject_${copiedMsg.message_id}` }
+                { text: '💬 Ответить', callback_data: `reply_${result.message_id}` },
+                { text: '✅ Принять', callback_data: `accept_${result.message_id}` },
+                { text: '❌ Отклонить', callback_data: `reject_${result.message_id}` }
               ]
             ]
           }
         }
       );
-      questionMap.set(copiedMsg.message_id, { userId, username });
+      questionMap.set(result.message_id, { userId, username });
       ctx.reply('Ваше медиа отправлено модераторам. Ожидайте ответа.');
     } catch (err) {
-      console.error('Ошибка при отправке медиа:', err);
+      console.error('Ошибка при копировании медиа:', err);
       ctx.reply('Произошла ошибка при отправке медиа.');
     }
   }
 });
-
-
 
 const express = require('express');
 const app = express();
