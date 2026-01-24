@@ -214,8 +214,7 @@ bot.action(/^reply_(\d+)$/, async (ctx) => {
     return;
   }
   replySessions.set(ctx.from.id, messageId);
-  await ctx.answerCbQuery('Теперь напишите ответ и отправьте его.');
-  ctx.reply('Напишите ваш ответ. После этого он будет отправлен пользователю.');
+  await ctx.answerCbQuery();
 });
 
 // Обработка кнопки "Отклонить"
