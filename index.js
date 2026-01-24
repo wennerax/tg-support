@@ -252,16 +252,22 @@ bot.on(['photo', 'sticker'], async (ctx) => {
         messageId,
         { 
           caption: headerText, 
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: '💬 Ответить', callback_data: `reply_${copiedMsg.message_id}` },
-                { text: '✅ Принять', callback_data: `accept_${copiedMsg.message_id}` },
-                { text: '❌ Отклонить', callback_data: `reject_${copiedMsg.message_id}` }
-              ]
+          parse_mode: 'Markdown'
+        }
+      );
+      // Add buttons after message is sent
+      await ctx.telegram.editMessageReplyMarkup(
+        MODERATION_CHAT_ID,
+        copiedMsg.message_id,
+        undefined,
+        {
+          inline_keyboard: [
+            [
+              { text: '💬 Ответить', callback_data: `reply_${copiedMsg.message_id}` },
+              { text: '✅ Принять', callback_data: `accept_${copiedMsg.message_id}` },
+              { text: '❌ Отклонить', callback_data: `reject_${copiedMsg.message_id}` }
             ]
-          }
+          ]
         }
       );
       questionMap.set(copiedMsg.message_id, { userId, username });
