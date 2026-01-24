@@ -110,8 +110,7 @@ bot.action(/^(accept|reject|reply)_(\d+)$/, async (ctx) => {
 
   if (action === 'reply') {
     moderatorReplyState.set(moderatorId, { messageId, userId, username });
-    ctx.answerCbQuery('Напишите ответ на вопрос (текст, фото, видео, стикер, гиф)');
-    await ctx.reply(`📨 Теперь отправьте ответ на вопрос пользователя ${userId} ${username}.\n\nВы можете отправить: текст, фото, видео, гиф или стикер.`);
+    ctx.answerCbQuery('Теперь напишите ответ');
   } else if (action === 'reject') {
     try {
       await ctx.telegram.sendMessage(userId, `❌ *Ваш вопрос был отклонен.*\n\nМодератор посчитал, что ваш вопрос не соответствует правилам сообщества. Пожалуйста, прочитайте правила и попробуйте еще раз.`, { parse_mode: 'Markdown' });
@@ -122,9 +121,6 @@ bot.action(/^(accept|reject|reply)_(\d+)$/, async (ctx) => {
       console.error('Ошибка при отклонении вопроса:', err);
       ctx.answerCbQuery('Не удалось отправить уведомление пользователю.');
     }
-  } else if (action === 'accept') {
-    ctx.answerCbQuery('Вопрос принят. Ожидаем вашего ответа.', false);
-    await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
   }
 });
 
@@ -193,7 +189,6 @@ bot.on('message', async (ctx) => {
           inline_keyboard: [
             [
               { text: '💬 Ответить', callback_data: `reply_PLACEHOLDER` },
-              { text: '✅ Принять', callback_data: `accept_PLACEHOLDER` },
               { text: '❌ Отклонить', callback_data: `reject_PLACEHOLDER` }
             ]
           ]
@@ -208,7 +203,6 @@ bot.on('message', async (ctx) => {
           inline_keyboard: [
             [
               { text: '💬 Ответить', callback_data: `reply_${sentMsg.message_id}` },
-              { text: '✅ Принять', callback_data: `accept_${sentMsg.message_id}` },
               { text: '❌ Отклонить', callback_data: `reject_${sentMsg.message_id}` }
             ]
           ]
@@ -302,7 +296,6 @@ bot.on(['photo', 'animation', 'video', 'document', 'sticker'], async (ctx) => {
             inline_keyboard: [
               [
                 { text: '💬 Ответить', callback_data: `reply_${result.message_id}` },
-                { text: '✅ Принять', callback_data: `accept_${result.message_id}` },
                 { text: '❌ Отклонить', callback_data: `reject_${result.message_id}` }
               ]
             ]
