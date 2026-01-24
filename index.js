@@ -184,21 +184,24 @@ bot.on('message', async (ctx) => {
 });
 
 // Обработка фото, стикеров, анимаций
-bot.on(['photo', 'sticker', 'animation'], async (ctx) => {
+// Обработка мультимедиа и стикеров
+bot.on(['photo', 'sticker', 'animation', 'video', 'audio', 'voice', 'document'], async (ctx) => {
   const chatId = ctx.chat.id;
+  const from = ctx.message.from;
+  const userId = from.id.toString();
 
   if (chatId === parseInt(MODERATION_CHAT_ID)) {
-    // Ответ модератора
+    // Ответ модератора — копировать в пользователя
     const replyMsgId = ctx.message.reply_to_message?.message_id;
     if (!replyMsgId || !questionMap.has(replyMsgId)) {
       await ctx.reply('Пожалуйста, отвечайте на сообщение, содержащее вопрос, используя reply.');
       return;
     }
-    const { userId, username } = questionMap.get(replyMsgId);
+    const { userId: targetUserId, username } = questionMap.get(replyMsgId);
     try {
-      // Copy the moderation message (with media) to the user to preserve original file
-      await ctx.telegram.copyMessage(userId, MODERATION_CHAT_ID, replyMsgId, { caption: '📝 *Ответ от модератора*', parse_mode: 'Markdown' });
-      await ctx.reply(`Медиа отправлены пользователю ${userId} (${username})`);
+      // копируем оригинальное сообщение модератора в пользователя
+      await ctx.telegram.copyMessage(targetUserId, MODERATION_CHAT_ID, replyMsgId, { caption: '📝 *Ответ от модератора*', parse_mode: 'Markdown' });
+      await ctx.reply(`Медиа отправлены пользователю ${targetUserId} (${username})`);
     } catch (err) {
       console.error('Ошибка при отправке медиа:', err);
       await ctx.reply('Не удалось отправить медиа пользователю.');
@@ -206,21 +209,24 @@ bot.on(['photo', 'sticker', 'animation'], async (ctx) => {
     return;
   }
 
-  // От пользователя
+  // От пользователя — отправляем в модерацию
   if (blockedUsers.has(userId)) return;
 
-  let headerText = `❓ *Вопрос от пользователя ${userId}*`;
+  // Исходное сообщение от пользователя — копируем в чат модерации
   try {
-    // Copy the user's original message to the moderation chat to preserve all media and metadata
-    const caption = ctx.message.caption ? `${headerText}\n${ctx.message.caption}` : headerText;
-    const copied = await ctx.telegram.copyMessage(MODERATION_CHAT_ID, chatId, ctx.message.message_id, { caption, parse_mode: 'Markdown' });
-    if (copied) {
-      questionMap.set(copied.message_id, { userId, username: from.username || '(без username)' });
-      await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, copied.message_id, undefined, createReplyKeyboard(copied.message_id));
+    const caption = ctx.message.caption ? `❓ *Медиа от пользователя ${userId}*: \n${ctx.message.caption}` : `❓ *Медиа от пользователя ${userId}*`;
+    const options = { caption, parse_mode: 'Markdown' };
+
+    // копируем в модерацию
+    const copiedMsg = await ctx.telegram.copyMessage(MODERATION_CHAT_ID, chatId, ctx.message.message_id, options);
+    // сохраняем связь
+    if (copiedMsg) {
+      questionMap.set(copiedMsg.message_id, { userId, username: from.username || '(без username)' });
+      await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, copiedMsg.message_id, undefined, createReplyKeyboard(copiedMsg.message_id));
     }
     ctx.reply('Ваше медиа отправлено модераторам. Ожидайте ответа.');
   } catch (err) {
-    console.error('Ошибка при отправке медиа:', err);
+    console.error('Ошибка при пересылке медиа:', err);
     ctx.reply('Произошла ошибка при отправке медиа.');
   }
 });
@@ -233,46 +239,15 @@ function getFileIdFromMessage(msg) {
   return null;
 }
 
-// Обработка видео, документов, аудио, голосовых
+// Обработка виде, документов, аудио, голосовых
 bot.on(['video', 'document', 'audio', 'voice'], async (ctx) => {
   const chatId = ctx.chat.id;
-  const from = ctx.message.from;
-  const userId = from.id.toString();
-
-  if (chatId === parseInt(MODERATION_CHAT_ID)) {
-    // Ответ модератора с медиа
-    const replyMsgId = ctx.message.reply_to_message?.message_id;
-    if (!replyMsgId || !questionMap.has(replyMsgId)) {
-      await ctx.reply('Пожалуйста, отвечайте на сообщение, содержащее вопрос, используя reply.');
-      return;
-    }
-    const { userId: targetUserId, username } = questionMap.get(replyMsgId);
+  if (chatId !== parseInt(MODERATION_CHAT_ID)) {
     try {
-      await ctx.telegram.copyMessage(targetUserId, MODERATION_CHAT_ID, ctx.message.message_id, { caption: '📝 *Ответ от модератора*', parse_mode: 'Markdown' });
-      await ctx.reply(`Медиа отправлено пользователю ${targetUserId} (${username})`);
+      await ctx.telegram.copyMessage(MODERATION_CHAT_ID, chatId, ctx.message.message_id);
     } catch (err) {
-      console.error('Ошибка при отправке медиа:', err);
-      await ctx.reply('Не удалось отправить медиа пользователю.');
+      console.error('Ошибка пересылки мультимедиа:', err);
     }
-    return;
-  }
-
-  // От пользователя - отправить в чат поддержки
-  if (blockedUsers.has(userId)) return;
-
-  const username = from.username ? `@${from.username}` : '(без username)';
-  const headerText = `❓ *Медиа от пользователя ${userId} ${username}:*`;
-  try {
-    const caption = ctx.message.caption ? `${headerText}\n${ctx.message.caption}` : headerText;
-    const copied = await ctx.telegram.copyMessage(MODERATION_CHAT_ID, chatId, ctx.message.message_id, { caption, parse_mode: 'Markdown' });
-    if (copied) {
-      questionMap.set(copied.message_id, { userId, username });
-      await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, copied.message_id, undefined, createReplyKeyboard(copied.message_id));
-    }
-    ctx.reply('Ваше медиа отправлено модераторам. Ожидайте ответа.');
-  } catch (err) {
-    console.error('Ошибка при отправке медиа:', err);
-    ctx.reply('Произошла ошибка при отправке медиа.');
   }
 });
 
