@@ -19,6 +19,7 @@ bot.use(session());
 
 const rawModerationChatId = "-1003691307198";
 const MODERATION_CHAT_ID = normalizeChatId(rawModerationChatId);
+const MODERATION_CHAT_ID_NUM = Number(MODERATION_CHAT_ID);
 
 function normalizeChatId(id) {
   const idStr = id.toString();
@@ -66,64 +67,53 @@ bot.start((ctx) => {
 
 // /hban
 bot.command('hban', async (ctx) => {
-  if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) return;
+  if (ctx.chat.id !== MODERATION_CHAT_ID_NUM) return;
   const args = ctx.message.text.split(' ').slice(1);
   if (args.length === 0) return ctx.reply('Используйте /hban @username или /hban user_id');
 
-  let userIdentifier = args[0];
+  const raw = String(args[0]).trim();
   let userIdToBan;
 
-  if (userIdentifier.startsWith('@')) {
-    userIdentifier = userIdentifier.slice(1);
-  }
-
-  if (/@/.test(userIdentifier) || isNaN(parseInt(userIdentifier, 10))) {
-    // treat as username
+  if (/^\d+$/.test(raw)) {
+    userIdToBan = raw;
+  } else {
+    const username = raw.startsWith('@') ? raw : `@${raw}`;
     try {
-      const chatMember = await ctx.telegram.getChatMember(MODERATION_CHAT_ID, userIdentifier);
-      userIdToBan = chatMember.user.id.toString();
-    } catch {
+      const chatMember = await ctx.telegram.getChatMember(MODERATION_CHAT_ID_NUM, username);
+      userIdToBan = String(chatMember.user.id);
+    } catch (err) {
       return ctx.reply('Не удалось найти пользователя с таким username.');
     }
-  } else {
-    const idNum = parseInt(userIdentifier, 10);
-    if (isNaN(idNum)) return ctx.reply('Некорректный user_id.');
-    userIdToBan = idNum.toString();
   }
 
   blockedUsers.add(userIdToBan);
-  ctx.reply(`Пользователь ${userIdentifier} заблокирован.`);
+  ctx.reply(`Пользователь ${raw} заблокирован.`);
 });
 
 // /unban
 bot.command('hunban', async (ctx) => {
-  if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) return;
+  if (ctx.chat.id !== MODERATION_CHAT_ID_NUM) return;
   const args = ctx.message.text.split(' ').slice(1);
   if (args.length === 0) return ctx.reply('Используйте /hunban @username или /hunban user_id');
 
-  let userIdentifier = args[0];
+  const raw = String(args[0]).trim();
   let userIdToUnban;
 
-  if (userIdentifier.startsWith('@')) {
-    userIdentifier = userIdentifier.slice(1);
-  }
-
-  if (/@/.test(userIdentifier) || isNaN(parseInt(userIdentifier, 10))) {
+  if (/^\d+$/.test(raw)) {
+    userIdToUnban = raw;
+  } else {
+    const username = raw.startsWith('@') ? raw : `@${raw}`;
     try {
-      const chatMember = await ctx.telegram.getChatMember(MODERATION_CHAT_ID, userIdentifier);
-      userIdToUnban = chatMember.user.id.toString();
-    } catch {
+      const chatMember = await ctx.telegram.getChatMember(MODERATION_CHAT_ID_NUM, username);
+      userIdToUnban = String(chatMember.user.id);
+    } catch (err) {
       return ctx.reply('Не удалось найти пользователя с таким username.');
     }
-  } else {
-    const idNum = parseInt(userIdentifier, 10);
-    if (isNaN(idNum)) return ctx.reply('Некорректный user_id.');
-    userIdToUnban = idNum.toString();
   }
 
   if (blockedUsers.has(userIdToUnban)) {
     blockedUsers.delete(userIdToUnban);
-    ctx.reply(`Пользователь ${userIdentifier} разблокирован.`);
+    ctx.reply(`Пользователь ${raw} разблокирован.`);
   } else {
     ctx.reply('Этот пользователь не заблокирован.');
   }
@@ -240,7 +230,7 @@ bot.on('message', async (ctx) => {
 bot.action(/^cancel_(\d+)$/, async (ctx) => {
   const messageId = parseInt(ctx.match[1]);
   const chatId = ctx.chat.id;
-  if (chatId !== parseInt(MODERATION_CHAT_ID)) {
+  if (chatId !== MODERATION_CHAT_ID_NUM) {
     await ctx.answerCbQuery('Только модераторы могут отклонять.', true);
     return;
   }
@@ -267,7 +257,7 @@ bot.action(/^cancel_(\d+)$/, async (ctx) => {
 bot.action(/^ban_(\d+)$/, async (ctx) => {
   const messageId = parseInt(ctx.match[1]);
   const chatId = ctx.chat.id;
-  if (chatId !== parseInt(MODERATION_CHAT_ID)) {
+  if (chatId !== MODERATION_CHAT_ID_NUM) {
     await ctx.answerCbQuery('Только модераторы могут блокировать.', true);
     return;
   }
@@ -300,7 +290,7 @@ bot.action(/^ban_(\d+)$/, async (ctx) => {
 bot.action(/^disband_(\d+)$/, async (ctx) => {
   const messageId = parseInt(ctx.match[1]);
   const chatId = ctx.chat.id;
-  if (chatId !== parseInt(MODERATION_CHAT_ID)) {
+  if (chatId !== MODERATION_CHAT_ID_NUM) {
     await ctx.answerCbQuery('Только модераторы могут удалять вопросы.', true);
     return;
   }
