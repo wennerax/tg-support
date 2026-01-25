@@ -100,3 +100,4 @@ function setupBanCommands(bot, MODERATION_CHAT_ID_NUM, blockedUsers, filePath) {
 }
 
 module.exports = { setupBanCommands, loadList, saveList };
+
