@@ -169,22 +169,15 @@ bot.on('message', async (ctx) => {
         await ctx.telegram.sendMessage(targetUserId, `📝 *Ответ от модератора:*\n${ctx.message.text}`, { parse_mode: 'Markdown' });
         ctx.reply(`Ответ отправлен пользователю ${targetUserId} (${username})`);
         
-        // Clear the active reply session and restore original buttons
+        // Clear the active reply session and delete the original question message
         ctx.session.activeReplySession = null;
-        const replyKeyboard = {
-          inline_keyboard: [
-            [
-              { text: '💬 Ответить', callback_data: `reply_${messageId}` },
-              { text: '✖️ Отклонить', callback_data: `cancel_${messageId}` }
-            ]
-          ]
-        };
+        questionMap.delete(messageId);
         
         try {
-          await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, messageId, undefined, replyKeyboard);
+          await ctx.telegram.deleteMessage(MODERATION_CHAT_ID, messageId);
         } catch (err) {
-          // Message might have been deleted
-          console.error('Could not restore buttons:', err);
+          // Message might have been already deleted
+          console.error('Could not delete message:', err);
         }
       } catch (err) {
         console.error('Ошибка при отправке сообщения пользователю:', err);
