@@ -12,11 +12,49 @@ module.exports = function setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap
 
     // Moderator replying with media to a user
     if (chatId === parseInt(MODERATION_CHAT_ID)) {
+      // Check if moderator is in active reply mode
+      ctx.session = ctx.session || {};
+      if (ctx.session.activeReplySession) {
+        const { messageId, userId: targetUserId, username } = ctx.session.activeReplySession;
+        
+        try {
+          // Copy the media message to the user
+          await ctx.telegram.copyMessage(targetUserId, MODERATION_CHAT_ID, ctx.message.message_id, {
+            caption: '📝 *Ответ от модератора*',
+            parse_mode: 'Markdown'
+          });
+          
+          ctx.reply(`Медиа отправлены пользователю ${targetUserId} (${username})`);
+          
+          // Clear the active reply session and restore original buttons
+          ctx.session.activeReplySession = null;
+          const replyKeyboard = {
+            inline_keyboard: [
+              [
+                { text: '💬 Ответить', callback_data: `reply_${messageId}` },
+                { text: '✖️ Отклонить', callback_data: `cancel_${messageId}` }
+              ]
+            ]
+          };
+          
+          try {
+            await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, messageId, undefined, replyKeyboard);
+          } catch (err) {
+            // Message might have been deleted
+            console.error('Could not restore buttons:', err);
+          }
+        } catch (err) {
+          console.error('Ошибка при отправке медиа пользователю:', err);
+          await ctx.reply('Не удалось отправить медиа пользователю.');
+        }
+        return;
+      }
+
       const replyMsgId = ctx.message.reply_to_message?.message_id;
       
       // Must be a reply to a tracked question
       if (!replyMsgId || !questionMap.has(replyMsgId)) {
-        await ctx.reply('Пожалуйста, отвечайте на сообщение, содержащее вопрос, используя reply.');
+        await ctx.reply('Пожалуйста, используйте кнопку "Ответить" на сообщении с вопросом, или отвечайте на сообщение, содержащее вопрос, используя reply.');
         return;
       }
 
@@ -73,3 +111,4 @@ module.exports = function setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap
     }
   });
 };
+
