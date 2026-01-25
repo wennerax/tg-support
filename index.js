@@ -2,7 +2,6 @@ require('dotenv').config();
 const { token } = require('./config');
 const { Telegraf } = require('telegraf');
 const setupMediaHandler = require('./mediaHandler');
-const setupModeratorReplyHandler = require('./moderatorReplyHandler');
 // const ImageProcessor = require('./imageProcessor');
 
 if (!token) {
@@ -41,9 +40,6 @@ function createReplyKeyboard(messageId) {
 
 // Setup media forwarding handler
 setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap, blockedUsers, createReplyKeyboard);
-
-// Setup moderator reply handler (removes button on click and detects response)
-setupModeratorReplyHandler(bot, MODERATION_CHAT_ID, questionMap);
 
 // Старт
 bot.start((ctx) => {
