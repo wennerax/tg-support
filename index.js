@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { token } = require('./config');
 const { Telegraf } = require('telegraf');
+const { session } = require('telegraf');
 const setupMediaHandler = require('./mediaHandler');
 const setupModeratorReplyHandler = require('./moderatorReplyHandler');
 // const ImageProcessor = require('./imageProcessor');
@@ -11,6 +12,9 @@ if (!token) {
 }
 
 const bot = new Telegraf(token);
+
+// Setup session middleware for tracking active reply sessions
+bot.use(session());
 // Note: use Telegram's copyMessage/sendDocument/sendSticker directly
 
 const rawModerationChatId = "-1003691307198";
@@ -156,10 +160,43 @@ bot.on('message', async (ctx) => {
   const userId = from.id.toString();
 
   if (chatId === parseInt(MODERATION_CHAT_ID)) {
-    // Ответ модератора
+    // Проверяем активный сеанс ответа
+    ctx.session = ctx.session || {};
+    if (ctx.session.activeReplySession) {
+      const { messageId, userId: targetUserId, username } = ctx.session.activeReplySession;
+      
+      try {
+        await ctx.telegram.sendMessage(targetUserId, `📝 *Ответ от модератора:*\n${ctx.message.text}`, { parse_mode: 'Markdown' });
+        ctx.reply(`Ответ отправлен пользователю ${targetUserId} (${username})`);
+        
+        // Clear the active reply session and restore original buttons
+        ctx.session.activeReplySession = null;
+        const replyKeyboard = {
+          inline_keyboard: [
+            [
+              { text: '💬 Ответить', callback_data: `reply_${messageId}` },
+              { text: '✖️ Отклонить', callback_data: `cancel_${messageId}` }
+            ]
+          ]
+        };
+        
+        try {
+          await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, messageId, undefined, replyKeyboard);
+        } catch (err) {
+          // Message might have been deleted
+          console.error('Could not restore buttons:', err);
+        }
+      } catch (err) {
+        console.error('Ошибка при отправке сообщения пользователю:', err);
+        ctx.reply('Не удалось отправить сообщение пользователю.');
+      }
+      return;
+    }
+
+    // Обычная проверка reply-to-message для старого режима
     const replyMsgId = ctx.message.reply_to_message?.message_id;
     if (!replyMsgId || !questionMap.has(replyMsgId)) {
-      await ctx.reply('Пожалуйста, отвечайте на сообщение, содержащее вопрос, используя reply.');
+      await ctx.reply('Пожалуйста, используйте кнопку "Ответить" на сообщении с вопросом, или отвечайте на сообщение, содержащее вопрос, используя reply.');
       return;
     }
     const { userId: targetUserId, username } = questionMap.get(replyMsgId);
