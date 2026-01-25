@@ -31,12 +31,13 @@ module.exports = function setupModeratorReplyHandler(bot, MODERATION_CHAT_ID, qu
         ]
       });
 
-      // Store the active reply session
+      // Store the active reply session (record moderator id so only they can cancel)
       ctx.session = ctx.session || {};
       ctx.session.activeReplySession = {
         messageId,
         userId,
         username,
+        moderatorId: ctx.from.id.toString(),
         started: Date.now()
       };
 
@@ -59,6 +60,20 @@ module.exports = function setupModeratorReplyHandler(bot, MODERATION_CHAT_ID, qu
     }
 
     ctx.session = ctx.session || {};
+    const active = ctx.session.activeReplySession;
+    // Ensure there's an active session for this message
+    if (!active || active.messageId !== messageId) {
+      await ctx.answerCbQuery('Режим ответа не активен или уже обработан.', true);
+      return;
+    }
+
+    // Only the moderator who started the reply may cancel it
+    const clickerId = ctx.from.id.toString();
+    if (active.moderatorId !== clickerId) {
+      await ctx.answerCbQuery('Только модератор, начавший ответ, может отменить.', true);
+      return;
+    }
+
     ctx.session.activeReplySession = null;
 
     try {
