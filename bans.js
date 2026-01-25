@@ -89,8 +89,7 @@ function setupBanCommands(bot, MODERATION_CHAT_ID_NUM, blockedUsers, filePath) {
     }
 
     const body = lines.map((l, i) => `${i + 1}. ${l}`).join('\n');
-    const message = '```
-' + body + '\n```';
+    const message = '```\n' + body + '\n```';
     try {
       await ctx.reply(message, { parse_mode: 'Markdown' });
     } catch (err) {
