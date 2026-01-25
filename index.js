@@ -96,7 +96,7 @@ bot.on('message', async (ctx) => {
       
       try {
         await ctx.telegram.sendMessage(targetUserId, `📝 *Ответ от модератора:*\n${ctx.message.text}`, { parse_mode: 'Markdown' });
-        ctx.reply(`Ответ отправлен пользователю ${targetUserId} (${username})`);
+        await ctx.reply(`Ответ отправлен пользователю \`${targetUserId}\` (${username})`, { parse_mode: 'Markdown' });
         
         // Clear the active reply session and delete the original question message
         ctx.session.activeReplySession = null;
@@ -124,7 +124,7 @@ bot.on('message', async (ctx) => {
     const { userId: targetUserId, username } = questionMap.get(replyMsgId);
     try {
       await ctx.telegram.sendMessage(targetUserId, `📝 *Ответ от модератора:*\n${ctx.message.text}`, { parse_mode: 'Markdown' });
-      ctx.reply(`Ответ отправлен пользователю ${targetUserId} (${username})`);
+      await ctx.reply(`Ответ отправлен пользователю \`${targetUserId}\` (${username})`, { parse_mode: 'Markdown' });
     } catch (err) {
       console.error('Ошибка при отправке сообщения пользователю:', err);
       ctx.reply('Не удалось отправить сообщение пользователю.');
@@ -137,9 +137,9 @@ bot.on('message', async (ctx) => {
 
   if (chatId !== parseInt(MODERATION_CHAT_ID)) {
     const username = from.username ? `@${from.username}` : '(без username)';
-    const questionText = `❓ *Вопрос от пользователя \\`${userId}\\` ${username}:*\n${ctx.message.text}`;
+    const questionText = `❓ *Вопрос от пользователя \`${userId}\` ${username}:*\n${ctx.message.text}`;
     try {
-      const sentMsg = await ctx.telegram.sendMessage(MODERATION_CHAT_ID, questionText, {parse_mode: 'MarkdownV2'});
+      const sentMsg = await ctx.telegram.sendMessage(MODERATION_CHAT_ID, questionText, { parse_mode: 'Markdown' });
       questionMap.set(sentMsg.message_id, { userId, username });
       await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, sentMsg.message_id, undefined, createReplyKeyboard(sentMsg.message_id));
       ctx.reply('Ваш вопрос отправлен модераторам. Ожидайте ответа.');
