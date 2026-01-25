@@ -28,17 +28,8 @@ module.exports = function setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap
           
           // Clear the active reply session and restore original buttons
           ctx.session.activeReplySession = null;
-          const replyKeyboard = {
-            inline_keyboard: [
-              [
-                { text: '💬 Ответить', callback_data: `reply_${messageId}` },
-                { text: '✖️ Отклонить', callback_data: `cancel_${messageId}` }
-              ]
-            ]
-          };
-          
           try {
-            await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, messageId, undefined, replyKeyboard);
+            await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, messageId, undefined, createReplyKeyboard(messageId));
           } catch (err) {
             // Message might have been deleted
             console.error('Could not restore buttons:', err);
@@ -111,3 +102,4 @@ module.exports = function setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap
     }
   });
 };
+
