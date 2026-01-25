@@ -29,6 +29,7 @@ function normalizeChatId(id) {
 
 const blockedUsers = new Set();
 const questionMap = new Map(); // messageId -> {userId, username}
+const lockedQuestions = new Set(); // messageId -> locked by someone
 const replySessions = new Map(); // from.id -> questionMessageId
 
 // Создаем inline-клавиатуру для ответов
@@ -47,7 +48,7 @@ function createReplyKeyboard(messageId) {
 setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap, blockedUsers, createReplyKeyboard);
 
 // Setup moderator reply handler (removes button on click and detects response)
-setupModeratorReplyHandler(bot, MODERATION_CHAT_ID, questionMap);
+setupModeratorReplyHandler(bot, MODERATION_CHAT_ID, questionMap, lockedQuestions);
 
 // Старт
 bot.start((ctx) => {
@@ -172,6 +173,7 @@ bot.on('message', async (ctx) => {
         // Clear the active reply session and delete the original question message
         ctx.session.activeReplySession = null;
         questionMap.delete(messageId);
+        lockedQuestions.delete(messageId);
         
         try {
           await ctx.telegram.deleteMessage(MODERATION_CHAT_ID, messageId);
