@@ -1,209 +1,165 @@
 /**
  * Moderator Reply Handler
- * Handles the flow where moderator clicks "reply" button,
- * button is removed, and moderator writes response without using reply-to-message
+ * Handles the reply workflow: when moderator clicks reply button,
+ * the button is deleted and a cancel button appears.
+ * The moderator's response is captured and stored.
  */
 
 module.exports = function setupModeratorReplyHandler(bot, MODERATION_CHAT_ID, questionMap) {
-  // Store active reply sessions: moderatorId -> { messageId, isReplyMode: true }
-  const moderatorReplySessions = new Map();
+  // Track active reply sessions: questionMessageId -> { replyState, cancelMessageId }
+  const replyStates = new Map();
 
-  /**
-   * Enhanced reply button handler - removes button and enters reply mode
-   */
-  bot.action(/^reply_(\d+)$/, async (ctx) => {
-    const messageId = parseInt(ctx.match[1]);
-    const chatId = ctx.chat.id;
-    const moderatorId = ctx.from.id;
-
-    // Only moderators can reply
-    if (chatId !== parseInt(MODERATION_CHAT_ID)) {
-      await ctx.answerCbQuery('Только модераторы могут отвечать.', true);
-      return;
-    }
-
-    // Check if question exists
-    if (!questionMap.has(messageId)) {
-      await ctx.answerCbQuery('Вопрос больше не найден.', true);
-      return;
-    }
-
-    // Remove the button by editing message markup
+  // Handle the "Reply" button click
+  bot.action(/^reply_(.+)$/, async (ctx) => {
     try {
-      await ctx.editMessageReplyMarkup(undefined);
-      await ctx.answerCbQuery('Кнопка удалена. Введите ответ.');
-    } catch (err) {
-      console.error('Ошибка при удалении кнопки:', err);
-      await ctx.answerCbQuery('Ошибка при удалении кнопки.', true);
-      return;
-    }
+      const messageId = parseInt(ctx.match[1], 10);
 
-    // Store the active reply session
-    moderatorReplySessions.set(moderatorId, {
-      messageId,
-      isReplyMode: true,
-      startTime: Date.now()
-    });
-
-    // Notify moderator to type response
-    try {
-      const { userId, username } = questionMap.get(messageId);
-      const notifyMsg = await ctx.reply(
-        `✏️ *Режим ответа активирован*\nВы отвечаете на вопрос от ${username} (ID: ${userId})\n\n📝 Теперь введите ваш ответ и отправьте его. Я автоматически пошлю его пользователю.`,
-        { parse_mode: 'Markdown' }
-      );
-      
-      // Store notification message ID for cleanup if needed
-      if (!moderatorReplySessions.has(moderatorId)) {
-        moderatorReplySessions.set(moderatorId, {});
+      // Check if this message is tracked
+      if (!questionMap.has(messageId)) {
+        await ctx.answerCbQuery('Сообщение больше не доступно.');
+        return;
       }
-      moderatorReplySessions.get(moderatorId).notifyMsgId = notifyMsg.message_id;
+
+      // Delete the reply button (remove inline keyboard)
+      await ctx.telegram.editMessageReplyMarkup(
+        MODERATION_CHAT_ID,
+        messageId,
+        undefined,
+        {
+          inline_keyboard: []
+        }
+      );
+
+      // Send message with Cancel button and instructions
+      const cancelMsg = await ctx.reply(
+        '✏️ *Напишите свой ответ* (отправьте текст сообщения и оно будет отправлено пользователю)',
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '❌ Отменить', callback_data: `cancel_reply_${messageId}` }
+              ]
+            ]
+          }
+        }
+      );
+
+      // Track this reply session
+      replyStates.set(messageId, {
+        replyState: 'waiting_for_response',
+        cancelMessageId: cancelMsg.message_id,
+        originalMessageId: messageId,
+        targetUserId: questionMap.get(messageId).userId
+      });
+
+      // Acknowledge the button click
+      await ctx.answerCbQuery('Режим ответа активирован');
     } catch (err) {
-      console.error('Ошибка при отправке уведомления:', err);
+      console.error('Ошибка при обработке нажатия кнопки reply:', err);
+      await ctx.answerCbQuery('Произошла ошибка');
     }
   });
 
-  /**
-   * Handle text input from moderator in reply mode
-   * Detects when moderator is in active reply session and sends response
-   */
+  // Handle the "Cancel Reply" button click
+  bot.action(/^cancel_reply_(.+)$/, async (ctx) => {
+    try {
+      const messageId = parseInt(ctx.match[1], 10);
+
+      // Check if this reply session exists
+      if (!replyStates.has(messageId)) {
+        await ctx.answerCbQuery('Сеанс ответа истёк');
+        return;
+      }
+
+      const sessionData = replyStates.get(messageId);
+
+      // Delete the cancel button message
+      await ctx.telegram.deleteMessage(MODERATION_CHAT_ID, sessionData.cancelMessageId);
+
+      // Restore the reply button
+      if (questionMap.has(messageId)) {
+        await ctx.telegram.editMessageReplyMarkup(
+          MODERATION_CHAT_ID,
+          messageId,
+          undefined,
+          {
+            inline_keyboard: [
+              [
+                { text: '💬 Ответить', callback_data: `reply_${messageId}` },
+                { text: '✖️ Отклонить', callback_data: `cancel_${messageId}` }
+              ]
+            ]
+          }
+        );
+      }
+
+      // Remove the reply session
+      replyStates.delete(messageId);
+
+      await ctx.answerCbQuery('Ответ отменён');
+    } catch (err) {
+      console.error('Ошибка при отмене ответа:', err);
+      await ctx.answerCbQuery('Произошла ошибка');
+    }
+  });
+
+  // Capture moderator's text response
   bot.on('text', async (ctx) => {
-    const moderatorId = ctx.from.id;
-    const chatId = ctx.chat.id;
-
     // Only process in moderation chat
-    if (chatId !== parseInt(MODERATION_CHAT_ID)) {
-      return;
+    if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) return;
+
+    // Check if there's an active reply session
+    let activeSessionMessageId = null;
+    for (const [messageId, sessionData] of replyStates.entries()) {
+      if (sessionData.replyState === 'waiting_for_response') {
+        activeSessionMessageId = messageId;
+        break;
+      }
     }
 
-    // Check if moderator has active reply session
-    if (!moderatorReplySessions.has(moderatorId)) {
-      return;
-    }
-
-    const session = moderatorReplySessions.get(moderatorId);
-    const { messageId, isReplyMode } = session;
-
-    // Only process if in reply mode
-    if (!isReplyMode) {
-      return;
-    }
-
-    // Check if question still exists
-    if (!questionMap.has(messageId)) {
-      ctx.reply('❌ Вопрос уже обработан или не найден.');
-      moderatorReplySessions.delete(moderatorId);
-      return;
-    }
-
-    const { userId: targetUserId, username } = questionMap.get(messageId);
-    const responseText = ctx.message.text;
+    // If no active reply session, skip
+    if (!activeSessionMessageId) return;
 
     try {
-      // Send response to user
+      const sessionData = replyStates.get(activeSessionMessageId);
+      const targetUserId = sessionData.targetUserId;
+      const responseText = ctx.message.text;
+
+      // Send the moderator's response to the user
       await ctx.telegram.sendMessage(
         targetUserId,
-        `📝 *Ответ от модератора:*\n${responseText}`,
+        `📝 *Ответ от модератора:*\n\n${responseText}`,
         { parse_mode: 'Markdown' }
       );
 
-      // Mark question as processed
-      questionMap.delete(messageId);
-
       // Confirm to moderator
-      ctx.reply(`✅ Ответ отправлен пользователю ${username} (ID: ${targetUserId})`);
+      await ctx.reply('✅ Ответ отправлен пользователю');
 
-      // End reply session
-      moderatorReplySessions.delete(moderatorId);
+      // Delete the cancel button message
+      await ctx.telegram.deleteMessage(MODERATION_CHAT_ID, sessionData.cancelMessageId);
+
+      // Remove the reply session
+      replyStates.delete(activeSessionMessageId);
+
+      // Log the response (optional - for record keeping)
+      console.log(`[REPLY SENT] Original message ID: ${activeSessionMessageId}, Target user: ${targetUserId}, Response: ${responseText}`);
     } catch (err) {
-      console.error('Ошибка при отправке ответа:', err);
-      ctx.reply('❌ Не удалось отправить ответ пользователю.');
+      console.error('Ошибка при отправке ответа пользователю:', err);
+      await ctx.reply('❌ Не удалось отправить ответ. Попробуйте ещё раз.');
     }
   });
 
-  /**
-   * Handle media responses from moderator in reply mode
-   */
-  function setupMediaReplyHandler() {
-    bot.on(['photo', 'sticker', 'animation', 'video', 'audio', 'voice', 'document'], async (ctx) => {
-      const moderatorId = ctx.from.id;
-      const chatId = ctx.chat.id;
-
-      // Only process in moderation chat
-      if (chatId !== parseInt(MODERATION_CHAT_ID)) {
-        return;
-      }
-
-      // Check if moderator has active reply session
-      if (!moderatorReplySessions.has(moderatorId)) {
-        return;
-      }
-
-      const session = moderatorReplySessions.get(moderatorId);
-      const { messageId, isReplyMode } = session;
-
-      // Only process if in reply mode
-      if (!isReplyMode) {
-        return;
-      }
-
-      // Check if question still exists
-      if (!questionMap.has(messageId)) {
-        ctx.reply('❌ Вопрос уже обработан или не найден.');
-        moderatorReplySessions.delete(moderatorId);
-        return;
-      }
-
-      const { userId: targetUserId, username } = questionMap.get(messageId);
-
-      try {
-        // Copy media to user with notification
-        await ctx.telegram.copyMessage(targetUserId, MODERATION_CHAT_ID, ctx.message.message_id, {
-          caption: '📝 *Ответ от модератора*',
-          parse_mode: 'Markdown'
-        });
-
-        // Mark question as processed
-        questionMap.delete(messageId);
-
-        // Confirm to moderator
-        ctx.reply(`✅ Медиа отправлено пользователю ${username} (ID: ${targetUserId})`);
-
-        // End reply session
-        moderatorReplySessions.delete(moderatorId);
-      } catch (err) {
-        console.error('Ошибка при отправке медиа:', err);
-        ctx.reply('❌ Не удалось отправить медиа пользователю.');
-      }
-    });
-  }
-
-  // Setup media handler
-  setupMediaReplyHandler();
-
-  /**
-   * Cancel reply session (optional - could be triggered by /cancel command)
-   */
-  bot.command('cancel', (ctx) => {
-    const moderatorId = ctx.from.id;
-    const chatId = ctx.chat.id;
-
-    if (chatId !== parseInt(MODERATION_CHAT_ID)) {
-      return;
-    }
-
-    if (moderatorReplySessions.has(moderatorId)) {
-      moderatorReplySessions.delete(moderatorId);
-      ctx.reply('❌ Режим ответа отменен.');
-    } else {
-      ctx.reply('ℹ️ Вы не в режиме ответа.');
-    }
-  });
-
-  // Return session map for external access if needed
+  // Export replyStates for external access if needed
   return {
-    getActiveSessions: () => new Map(moderatorReplySessions),
-    getSessionForModerator: (moderatorId) => moderatorReplySessions.get(moderatorId),
-    clearSession: (moderatorId) => moderatorReplySessions.delete(moderatorId)
+    getReplyStates: () => replyStates,
+    clearExpiredSessions: function(maxAgeMs = 3600000) {
+      const now = Date.now();
+      for (const [messageId, sessionData] of replyStates.entries()) {
+        if (now - sessionData.createdAt > maxAgeMs) {
+          replyStates.delete(messageId);
+        }
+      }
+    }
   };
 };
