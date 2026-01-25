@@ -2,6 +2,7 @@ require('dotenv').config();
 const { token } = require('./config');
 const { Telegraf } = require('telegraf');
 const setupMediaHandler = require('./mediaHandler');
+const setupModeratorReplyHandler = require('./moderatorReplyHandler');
 // const ImageProcessor = require('./imageProcessor');
 
 if (!token) {
@@ -40,6 +41,9 @@ function createReplyKeyboard(messageId) {
 
 // Setup media forwarding handler
 setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap, blockedUsers, createReplyKeyboard);
+
+// Setup moderator reply handler (removes button on click and detects response)
+setupModeratorReplyHandler(bot, MODERATION_CHAT_ID, questionMap);
 
 // Старт
 bot.start((ctx) => {
@@ -187,25 +191,7 @@ bot.on('message', async (ctx) => {
   }
 });
 
-// Media and sticker forwarding handled by mediaHandler.js
-// All photo, sticker, animation, video, audio, voice, and document messages are processed there
-
-// Обработка кнопок "Ответить" и "Отклонить"
-bot.action(/^reply_(\d+)$/, async (ctx) => {
-  const messageId = parseInt(ctx.match[1]);
-  const chatId = ctx.chat.id;
-  if (chatId !== parseInt(MODERATION_CHAT_ID)) {
-    await ctx.answerCbQuery('Только модераторы могут отвечать.', true);
-    return;
-  }
-  if (!questionMap.has(messageId)) {
-    await ctx.answerCbQuery('Вопрос больше не найден.', true);
-    return;
-  }
-  replySessions.set(ctx.from.id, messageId);
-  await ctx.answerCbQuery('Теперь напишите ответ и отправьте его.');
-  ctx.reply('Напишите ваш ответ. После этого он будет отправлен пользователю.');
-});
+// Reply and reject button handlers are in moderatorReplyHandler.js
 
 // Обработка кнопки "Отклонить"
 bot.action(/^cancel_(\d+)$/, async (ctx) => {
@@ -232,26 +218,6 @@ bot.action(/^cancel_(\d+)$/, async (ctx) => {
   
   await ctx.editMessageReplyMarkup(undefined);
   await ctx.answerCbQuery('Вопрос отклонен.');
-});
-
-// Обработка текстовых сообщений (ответ модератора)
-bot.on('text', async (ctx) => {
-  const fromId = ctx.from.id;
-  if (!replySessions.has(fromId)) return;
-  const questionMsgId = replySessions.get(fromId);
-  replySessions.delete(fromId);
-  if (!questionMap.has(questionMsgId)) {
-    ctx.reply('Вопрос уже обработан или не найден.');
-    return;
-  }
-  const { userId, username } = questionMap.get(questionMsgId);
-  try {
-    await ctx.telegram.sendMessage(userId, `📝 *Ответ от модератора:*\n${ctx.message.text}`, { parse_mode: 'Markdown' });
-    ctx.reply(`Ответ отправлен пользователю ${userId} (${username})`);
-  } catch (err) {
-    console.error('Ошибка при отправке ответа:', err);
-    ctx.reply('Не удалось отправить ответ пользователю.');
-  }
 });
 
 // Запуск сервера
