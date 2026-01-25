@@ -41,9 +41,6 @@ function createReplyKeyboard(messageId) {
         { text: '💬 Ответить', callback_data: `reply_${messageId}` },
         { text: '✖️ Отклонить', callback_data: `cancel_${messageId}` }
       ],
-      [
-        { text: '🗑️ Удалить', callback_data: `disband_${messageId}` }
-      ]
     ]
   };
 }
@@ -182,64 +179,6 @@ bot.action(/^cancel_(\d+)$/, async (ctx) => {
   await ctx.answerCbQuery('Вопрос отклонен.');
 });
 
-// Обработка кнопки "Заблокировать"
-bot.action(/^ban_(\d+)$/, async (ctx) => {
-  const messageId = parseInt(ctx.match[1]);
-  const chatId = ctx.chat.id;
-  if (chatId !== MODERATION_CHAT_ID_NUM) {
-    await ctx.answerCbQuery('Только модераторы могут блокировать.', true);
-    return;
-  }
-  if (!questionMap.has(messageId)) {
-    await ctx.answerCbQuery('Вопрос уже обработан или не найден.', true);
-    return;
-  }
-
-  const { userId, username } = questionMap.get(messageId);
-  blockedUsers.add(userId);
-  questionMap.delete(messageId);
-
-  try {
-    await ctx.telegram.sendMessage(userId, '⛔ *Вам отказано в поддержке. Ваши вопросы больше не принимаются.*', { parse_mode: 'Markdown' });
-  } catch (err) {
-    console.error('Не удалось уведомить пользователя о блокировке:', err);
-  }
-
-  try {
-    await ctx.telegram.deleteMessage(MODERATION_CHAT_ID, messageId);
-  } catch (err) {
-    console.error('Could not delete message after ban:', err);
-  }
-
-  await ctx.editMessageReplyMarkup(undefined);
-  await ctx.answerCbQuery(`Пользователь ${username || userId} заблокирован.`);
-});
-
-// Обработка кнопки "Disband" (удалить/отклонить без уведомления)
-bot.action(/^disband_(\d+)$/, async (ctx) => {
-  const messageId = parseInt(ctx.match[1]);
-  const chatId = ctx.chat.id;
-  if (chatId !== MODERATION_CHAT_ID_NUM) {
-    await ctx.answerCbQuery('Только модераторы могут удалять вопросы.', true);
-    return;
-  }
-  if (!questionMap.has(messageId)) {
-    await ctx.answerCbQuery('Вопрос уже обработан или не найден.', true);
-    return;
-  }
-
-  const { userId, username } = questionMap.get(messageId);
-  questionMap.delete(messageId);
-
-  try {
-    await ctx.telegram.deleteMessage(MODERATION_CHAT_ID, messageId);
-  } catch (err) {
-    console.error('Could not delete message on disband:', err);
-  }
-
-  await ctx.editMessageReplyMarkup(undefined);
-  await ctx.answerCbQuery(`Вопрос от ${username || userId} удалён.`);
-});
 
 // Запуск сервера
 const express = require('express');
