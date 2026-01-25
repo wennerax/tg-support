@@ -2,6 +2,7 @@ require('dotenv').config();
 const { token } = require('./config');
 const { Telegraf } = require('telegraf');
 const setupMediaHandler = require('./mediaHandler');
+const setupModeratorReplyHandler = require('./moderatorReplyHandler');
 // const ImageProcessor = require('./imageProcessor');
 
 if (!token) {
@@ -12,7 +13,7 @@ if (!token) {
 const bot = new Telegraf(token);
 // Note: use Telegram's copyMessage/sendDocument/sendSticker directly
 
-const rawModerationChatId = "-1002485675560";
+const rawModerationChatId = "-1003691307198";
 const MODERATION_CHAT_ID = normalizeChatId(rawModerationChatId);
 
 function normalizeChatId(id) {
@@ -40,6 +41,9 @@ function createReplyKeyboard(messageId) {
 
 // Setup media forwarding handler
 setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap, blockedUsers, createReplyKeyboard);
+
+// Setup moderator reply handler (removes button on click and detects response)
+setupModeratorReplyHandler(bot, MODERATION_CHAT_ID, questionMap);
 
 // Старт
 bot.start((ctx) => {
