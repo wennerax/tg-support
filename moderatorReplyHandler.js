@@ -3,7 +3,7 @@
  * Handles the reply button click - removes the reply button and shows cancel button
  */
 
-module.exports = function setupModeratorReplyHandler(bot, MODERATION_CHAT_ID, questionMap) {
+module.exports = function setupModeratorReplyHandler(bot, MODERATION_CHAT_ID, questionMap, createReplyKeyboard) {
   // Обработка кнопки "Ответить"
   bot.action(/^reply_(\d+)$/, async (ctx) => {
     const messageId = parseInt(ctx.match[1]);
@@ -21,7 +21,7 @@ module.exports = function setupModeratorReplyHandler(bot, MODERATION_CHAT_ID, qu
 
     const { userId, username } = questionMap.get(messageId);
 
-    try {
+      try {
       // Replace the reply button with cancel button
       await ctx.editMessageReplyMarkup({
         inline_keyboard: [
@@ -76,18 +76,9 @@ module.exports = function setupModeratorReplyHandler(bot, MODERATION_CHAT_ID, qu
 
     ctx.session.activeReplySession = null;
 
-    try {
-      // Restore the original reply and reject buttons
-      const replyKeyboard = {
-        inline_keyboard: [
-          [
-            { text: '💬 Ответить', callback_data: `reply_${messageId}` },
-            { text: '✖️ Отклонить', callback_data: `cancel_${messageId}` }
-          ]
-        ]
-      };
-      
-      await ctx.editMessageReplyMarkup(replyKeyboard);
+      try {
+      // Restore the original reply/reject/disband buttons
+      await ctx.editMessageReplyMarkup(createReplyKeyboard(messageId));
       await ctx.answerCbQuery('Режим ответа отменен.');
     } catch (err) {
       console.error('Ошибка при отмене режима ответа:', err);
@@ -95,4 +86,3 @@ module.exports = function setupModeratorReplyHandler(bot, MODERATION_CHAT_ID, qu
     }
   });
 };
-
