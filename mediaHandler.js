@@ -24,7 +24,7 @@ module.exports = function setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap
             parse_mode: 'Markdown'
           });
           
-          ctx.reply(`Медиа отправлены пользователю ${targetUserId} (${username})`);
+          await ctx.reply(`Медиа отправлены пользователю \`${targetUserId}\` (${username})`, { parse_mode: 'Markdown' });
           
           // Clear the active reply session and restore original buttons
           ctx.session.activeReplySession = null;
@@ -58,7 +58,7 @@ module.exports = function setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap
           parse_mode: 'Markdown'
         });
         
-        await ctx.reply(`Медиа отправлены пользователю ${targetUserId} (${username})`);
+        await ctx.reply(`Медиа отправлены пользователю \`${targetUserId}\` (${username})`, { parse_mode: 'Markdown' });
       } catch (err) {
         console.error('Ошибка при отправке медиа пользователю:', err);
         await ctx.reply('Не удалось отправить медиа пользователю.');
@@ -72,8 +72,8 @@ module.exports = function setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap
     // Forward user's media to moderation chat
     const username = from.username ? `@${from.username}` : '(без username)';
     const caption = ctx.message.caption 
-      ? `❓ *Медиа от пользователя ${userId} ${username}:*\n${ctx.message.caption}` 
-      : `❓ *Медиа от пользователя ${userId} ${username}*`;
+      ? `❓ *Медиа от пользователя \`${userId}\` ${username}:*\n${ctx.message.caption}` 
+      : `❓ *Медиа от пользователя \`${userId}\` ${username}*`;
 
     try {
       // Copy media to moderation chat
