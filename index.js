@@ -31,6 +31,7 @@ function normalizeChatId(id) {
 const blockedUsers = new Set();
 const questionMap = new Map(); // messageId -> {userId, username}
 const replySessions = new Map(); // from.id -> questionMessageId
+const { setupBanCommands } = require('./bans');
 
 // Создаем inline-клавиатуру для ответов
 function createReplyKeyboard(messageId) {
@@ -65,79 +66,8 @@ bot.start((ctx) => {
 📩 *Жду твоего сообщения!*`, { parse_mode: 'Markdown' });
 });
 
-// /hban
-bot.command('hban', async (ctx) => {
-  if (ctx.chat.id !== MODERATION_CHAT_ID_NUM) return;
-  const args = ctx.message.text.split(' ').slice(1);
-  if (args.length === 0) return ctx.reply('Используйте /hban @username или /hban user_id');
-
-  const raw = String(args[0]).trim();
-  let userIdToBan;
-
-  if (/^\d+$/.test(raw)) {
-    userIdToBan = raw;
-  } else {
-    const username = raw.startsWith('@') ? raw : `@${raw}`;
-    try {
-      const chatMember = await ctx.telegram.getChatMember(MODERATION_CHAT_ID_NUM, username);
-      userIdToBan = String(chatMember.user.id);
-    } catch (err) {
-      return ctx.reply('Не удалось найти пользователя с таким username.');
-    }
-  }
-
-  blockedUsers.add(userIdToBan);
-  ctx.reply(`Пользователь ${raw} заблокирован.`);
-});
-
-// /unban
-bot.command('hunban', async (ctx) => {
-  if (ctx.chat.id !== MODERATION_CHAT_ID_NUM) return;
-  const args = ctx.message.text.split(' ').slice(1);
-  if (args.length === 0) return ctx.reply('Используйте /hunban @username или /hunban user_id');
-
-  const raw = String(args[0]).trim();
-  let userIdToUnban;
-
-  if (/^\d+$/.test(raw)) {
-    userIdToUnban = raw;
-  } else {
-    const username = raw.startsWith('@') ? raw : `@${raw}`;
-    try {
-      const chatMember = await ctx.telegram.getChatMember(MODERATION_CHAT_ID_NUM, username);
-      userIdToUnban = String(chatMember.user.id);
-    } catch (err) {
-      return ctx.reply('Не удалось найти пользователя с таким username.');
-    }
-  }
-
-  if (blockedUsers.has(userIdToUnban)) {
-    blockedUsers.delete(userIdToUnban);
-    ctx.reply(`Пользователь ${raw} разблокирован.`);
-  } else {
-    ctx.reply('Этот пользователь не заблокирован.');
-  }
-});
-
-// /sendimage
-bot.command('sendimage', async (ctx) => {
-  if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) return;
-  const args = ctx.message.text.split(' ').slice(1);
-  if (args.length < 2) {
-    return ctx.reply('Используйте: /sendimage <userId> <imageUrl или fileId>');
-  }
-  const userId = args[0];
-  const imageSource = args.slice(1).join(' ');
-  try {
-    // Send as document (preserve quality) if possible
-    await ctx.telegram.sendDocument(userId, imageSource, { caption: '', parse_mode: 'Markdown' });
-    ctx.reply(`Изображение отправлено пользователю ${userId}`);
-  } catch (err) {
-    console.error('Ошибка при отправке изображения:', err);
-    ctx.reply('Не удалось отправить изображение пользователю.');
-  }
-});
-
+// Register ban command handlers from bans.js (persists to bannedUsers.json)
+setupBanCommands(bot, MODERATION_CHAT_ID_NUM, blockedUsers);
 // /sendsticker
 bot.command('sendsticker', async (ctx) => {
   if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) return;
