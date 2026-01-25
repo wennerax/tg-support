@@ -111,4 +111,3 @@ module.exports = function setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap
     }
   });
 };
-
