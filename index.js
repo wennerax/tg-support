@@ -95,15 +95,14 @@ bot.on('message', async (ctx) => {
           await ctx.telegram.sendMessage(targetUserId, `📝 Ответ от модератора:\n${ctx.message.text}`);
           await ctx.reply(`Ответ отправлен пользователю ${targetUserId} (${username})`);
         
-        // Clear the active reply session and delete the original question message
+        // Clear the active reply session and mark question answered so it cannot be answered again
         ctx.session.activeReplySession = null;
         questionMap.delete(messageId);
-        
         try {
-          await ctx.telegram.deleteMessage(MODERATION_CHAT_ID, messageId);
+          // Keep the moderation message visible but remove reply buttons
+          await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, messageId, undefined, undefined);
         } catch (err) {
-          // Message might have been already deleted
-          console.error('Could not delete message:', err);
+          console.error('Could not edit message after reply:', err);
         }
       } catch (err) {
         console.error('Ошибка при отправке сообщения пользователю:', err);
@@ -122,12 +121,12 @@ bot.on('message', async (ctx) => {
       try {
         await ctx.telegram.sendMessage(targetUserId, `📝 Ответ от модератора:\n${ctx.message.text}`);
         await ctx.reply(`Ответ отправлен пользователю ${targetUserId} (${username})`);
-        // Mark question as answered so it cannot be answered again
+        // Mark question as answered so it cannot be answered again and clear reply buttons
         questionMap.delete(replyMsgId);
         try {
-          await ctx.telegram.deleteMessage(MODERATION_CHAT_ID, replyMsgId);
+          await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, replyMsgId, undefined, undefined);
         } catch (err) {
-          console.error('Could not delete moderation message after reply:', err);
+          console.error('Could not edit moderation message after reply:', err);
         }
     } catch (err) {
       console.error('Ошибка при отправке сообщения пользователю:', err);
