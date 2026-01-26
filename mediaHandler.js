@@ -27,11 +27,12 @@ module.exports = function setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap
           
           // Clear the active reply session and restore original buttons
           ctx.session.activeReplySession = null;
+          // Mark question as answered and remove moderation message
+          questionMap.delete(messageId);
           try {
-            await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, messageId, undefined, createReplyKeyboard(messageId));
+            await ctx.telegram.deleteMessage(MODERATION_CHAT_ID, messageId);
           } catch (err) {
-            // Message might have been deleted
-            console.error('Could not restore buttons:', err);
+            console.error('Could not delete moderation message after media reply:', err);
           }
         } catch (err) {
           console.error('Ошибка при отправке медиа пользователю:', err);
@@ -57,6 +58,13 @@ module.exports = function setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap
         });
 
         await ctx.reply(`Медиа отправлены пользователю ${targetUserId} (${username})`);
+        // Mark question as answered and remove moderation message
+        questionMap.delete(replyMsgId);
+        try {
+          await ctx.telegram.deleteMessage(MODERATION_CHAT_ID, replyMsgId);
+        } catch (err) {
+          console.error('Could not delete moderation message after media reply:', err);
+        }
       } catch (err) {
         console.error('Ошибка при отправке медиа пользователю:', err);
         await ctx.reply('Не удалось отправить медиа пользователю.');
