@@ -39,12 +39,27 @@ function setupBanCommands(bot, MODERATION_CHAT_ID_NUM, blockedUsers, filePath) {
   bot.command('hban', async (ctx) => {
     if (ctx.chat.id !== MODERATION_CHAT_ID_NUM) return;
     const args = ctx.message.text.split(' ').slice(1);
-    if (args.length === 0) return ctx.reply('Используйте /hban <user_id> (numeric)');
+    if (args.length === 0) return ctx.reply('Используйте /hban <user_id|@username>');
 
-    const raw = String(args[0]).trim();
-    if (!/^\d+$/.test(raw)) return ctx.reply('Некорректный user_id. Используйте только числовой ID.');
+    let raw = String(args[0]).trim();
+    let userIdToBan = null;
 
-    const userIdToBan = raw;
+    // If looks like numeric id, use it directly
+    if (/^\d+$/.test(raw)) {
+      userIdToBan = raw;
+    } else {
+      // try to resolve @username via getChat
+      if (!raw.startsWith('@')) raw = `@${raw}`;
+      try {
+        const chat = await ctx.telegram.getChat(raw);
+        if (chat && chat.id) userIdToBan = String(chat.id);
+        else return ctx.reply('Не удалось найти пользователя по указанному username.');
+      } catch (err) {
+        console.error('Failed to resolve username for ban:', err);
+        return ctx.reply('Не удалось найти пользователя по указанному username.');
+      }
+    }
+
     blockedUsers.add(String(userIdToBan));
     persist();
     ctx.reply(`Пользователь ${userIdToBan} заблокирован.`);
@@ -53,12 +68,25 @@ function setupBanCommands(bot, MODERATION_CHAT_ID_NUM, blockedUsers, filePath) {
   bot.command('hunban', async (ctx) => {
     if (ctx.chat.id !== MODERATION_CHAT_ID_NUM) return;
     const args = ctx.message.text.split(' ').slice(1);
-    if (args.length === 0) return ctx.reply('Используйте /hunban <user_id> (numeric)');
+    if (args.length === 0) return ctx.reply('Используйте /hunban <user_id|@username>');
 
-    const raw = String(args[0]).trim();
-    if (!/^\d+$/.test(raw)) return ctx.reply('Некорректный user_id. Используйте только числовой ID.');
+    let raw = String(args[0]).trim();
+    let userIdToUnban = null;
 
-    const userIdToUnban = raw;
+    if (/^\d+$/.test(raw)) {
+      userIdToUnban = raw;
+    } else {
+      if (!raw.startsWith('@')) raw = `@${raw}`;
+      try {
+        const chat = await ctx.telegram.getChat(raw);
+        if (chat && chat.id) userIdToUnban = String(chat.id);
+        else return ctx.reply('Не удалось найти пользователя по указанному username.');
+      } catch (err) {
+        console.error('Failed to resolve username for unban:', err);
+        return ctx.reply('Не удалось найти пользователя по указанному username.');
+      }
+    }
+
     if (blockedUsers.has(String(userIdToUnban))) {
       blockedUsers.delete(String(userIdToUnban));
       persist();
@@ -100,4 +128,3 @@ function setupBanCommands(bot, MODERATION_CHAT_ID_NUM, blockedUsers, filePath) {
 }
 
 module.exports = { setupBanCommands, loadList, saveList };
-
