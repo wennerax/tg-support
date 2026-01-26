@@ -140,9 +140,9 @@ bot.on('message', async (ctx) => {
 
   if (chatId !== parseInt(MODERATION_CHAT_ID)) {
     const username = from.username ? `@${from.username}` : '(без username)';
-    const questionText = `❓ Вопрос от пользователя ${userId} ${username}:\n${ctx.message.text}`;
+    const questionText = `❓ Вопрос от пользователя <code>${userId}</code> ${username}:\n${ctx.message.text}`;
     try {
-      const sentMsg = await ctx.telegram.sendMessage(MODERATION_CHAT_ID, questionText);
+      const sentMsg = await ctx.telegram.sendMessage(MODERATION_CHAT_ID, questionText, { parse_mode: 'HTML' });
       questionMap.set(sentMsg.message_id, { userId, username });
       await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, sentMsg.message_id, undefined, createReplyKeyboard(sentMsg.message_id));
       ctx.reply('Ваш вопрос отправлен модераторам. Ожидайте ответа.');
