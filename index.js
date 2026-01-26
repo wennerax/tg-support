@@ -16,7 +16,7 @@ const bot = new Telegraf(token);
 bot.use(session());
 // Note: use Telegram's copyMessage/sendDocument/sendSticker directly
 
-const rawModerationChatId = "-1003691307198";
+const rawModerationChatId = "-1002485675560";
 const MODERATION_CHAT_ID = normalizeChatId(rawModerationChatId);
 const MODERATION_CHAT_ID_NUM = Number(MODERATION_CHAT_ID);
 
