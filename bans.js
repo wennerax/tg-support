@@ -55,8 +55,9 @@ function setupBanCommands(bot, MODERATION_CHAT_ID_NUM, blockedUsers, filePath) {
         if (chat && chat.id) userIdToBan = String(chat.id);
         else return ctx.reply('Не удалось найти пользователя по указанному username.');
       } catch (err) {
-        console.error('Failed to resolve username for ban:', err);
-        return ctx.reply('Не удалось найти пользователя по указанному username.');
+        const desc = err && err.response && err.response.description ? err.response.description : err.message || String(err);
+        console.error('Failed to resolve username for ban:', desc);
+        return ctx.reply('Не удалось найти пользователя по указанному username. Убедитесь, что имя корректно и бот может связаться с пользователем (или используйте числовой ID).');
       }
     }
 
@@ -82,8 +83,9 @@ function setupBanCommands(bot, MODERATION_CHAT_ID_NUM, blockedUsers, filePath) {
         if (chat && chat.id) userIdToUnban = String(chat.id);
         else return ctx.reply('Не удалось найти пользователя по указанному username.');
       } catch (err) {
-        console.error('Failed to resolve username for unban:', err);
-        return ctx.reply('Не удалось найти пользователя по указанному username.');
+        const desc = err && err.response && err.response.description ? err.response.description : err.message || String(err);
+        console.error('Failed to resolve username for unban:', desc);
+        return ctx.reply('Не удалось найти пользователя по указанному username. Убедитесь, что имя корректно и бот может связаться с пользователем (или используйте числовой ID).');
       }
     }
 
