@@ -25,14 +25,14 @@ module.exports = function setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap
 
           await ctx.reply(`Медиа отправлены пользователю ${targetUserId} (${username})`);
           
-          // Clear the active reply session and restore original buttons
+          // Clear the active reply session and mark question answered so it cannot be answered again
           ctx.session.activeReplySession = null;
-          // Mark question as answered and remove moderation message
           questionMap.delete(messageId);
           try {
-            await ctx.telegram.deleteMessage(MODERATION_CHAT_ID, messageId);
+            // Keep the moderation message visible but remove reply buttons so it cannot be answered again
+            await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, messageId, undefined, undefined);
           } catch (err) {
-            console.error('Could not delete moderation message after media reply:', err);
+            console.error('Could not edit moderation message after media reply:', err);
           }
         } catch (err) {
           console.error('Ошибка при отправке медиа пользователю:', err);
@@ -58,12 +58,12 @@ module.exports = function setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap
         });
 
         await ctx.reply(`Медиа отправлены пользователю ${targetUserId} (${username})`);
-        // Mark question as answered and remove moderation message
+        // Mark question as answered so it cannot be answered again and clear reply buttons
         questionMap.delete(replyMsgId);
         try {
-          await ctx.telegram.deleteMessage(MODERATION_CHAT_ID, replyMsgId);
+          await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, replyMsgId, undefined, undefined);
         } catch (err) {
-          console.error('Could not delete moderation message after media reply:', err);
+          console.error('Could not edit moderation message after media reply:', err);
         }
       } catch (err) {
         console.error('Ошибка при отправке медиа пользователю:', err);
