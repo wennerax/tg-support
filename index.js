@@ -3,7 +3,6 @@ const { token } = require('./config');
 const { Telegraf } = require('telegraf');
 const { session } = require('telegraf');
 const setupMediaHandler = require('./mediaHandler');
-const setupModeratorReplyHandler = require('./moderatorReplyHandler');
 // const ImageProcessor = require('./imageProcessor');
 
 if (!token) {
@@ -17,7 +16,7 @@ const bot = new Telegraf(token);
 bot.use(session());
 // Note: use Telegram's copyMessage/sendDocument/sendSticker directly
 
-const rawModerationChatId = "-1002485675560";
+const rawModerationChatId = "-1003691307198";
 const MODERATION_CHAT_ID = normalizeChatId(rawModerationChatId);
 const MODERATION_CHAT_ID_NUM = Number(MODERATION_CHAT_ID);
 
@@ -38,7 +37,6 @@ function createReplyKeyboard(messageId) {
   return {
     inline_keyboard: [
       [
-        { text: '💬 Ответить', callback_data: `reply_${messageId}` },
         { text: '✖️ Отклонить', callback_data: `cancel_${messageId}` }
       ],
     ]
@@ -48,8 +46,7 @@ function createReplyKeyboard(messageId) {
 // Setup media forwarding handler
 setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap, blockedUsers, createReplyKeyboard);
 
-// Setup moderator reply handler (removes button on click and detects response)
-setupModeratorReplyHandler(bot, MODERATION_CHAT_ID, questionMap, createReplyKeyboard);
+// Reply handling via buttons was removed; moderators should reply by replying to the message.
 
 // Старт
 bot.start((ctx) => {
@@ -94,9 +91,9 @@ bot.on('message', async (ctx) => {
     if (ctx.session.activeReplySession) {
       const { messageId, userId: targetUserId, username } = ctx.session.activeReplySession;
       
-      try {
-        await ctx.telegram.sendMessage(targetUserId, `📝 *Ответ от модератора:*\n${ctx.message.text}`, { parse_mode: 'Markdown' });
-        await ctx.reply(`Ответ отправлен пользователю \`${targetUserId}\` (${username})`, { parse_mode: 'Markdown' });
+        try {
+          await ctx.telegram.sendMessage(targetUserId, `📝 Ответ от модератора:\n${ctx.message.text}`);
+          await ctx.reply(`Ответ отправлен пользователю ${targetUserId} (${username})`);
         
         // Clear the active reply session and delete the original question message
         ctx.session.activeReplySession = null;
@@ -118,13 +115,13 @@ bot.on('message', async (ctx) => {
     // Обычная проверка reply-to-message для старого режима
     const replyMsgId = ctx.message.reply_to_message?.message_id;
     if (!replyMsgId || !questionMap.has(replyMsgId)) {
-      await ctx.reply('Пожалуйста, используйте кнопку "Ответить" на сообщении с вопросом, или отвечайте на сообщение, содержащее вопрос, используя reply.');
+      await ctx.reply('Пожалуйста, отвечайте на сообщение, содержащее вопрос, используя reply.');
       return;
     }
     const { userId: targetUserId, username } = questionMap.get(replyMsgId);
-    try {
-      await ctx.telegram.sendMessage(targetUserId, `📝 *Ответ от модератора:*\n${ctx.message.text}`, { parse_mode: 'Markdown' });
-      await ctx.reply(`Ответ отправлен пользователю \`${targetUserId}\` (${username})`, { parse_mode: 'Markdown' });
+      try {
+        await ctx.telegram.sendMessage(targetUserId, `📝 Ответ от модератора:\n${ctx.message.text}`);
+        await ctx.reply(`Ответ отправлен пользователю ${targetUserId} (${username})`);
     } catch (err) {
       console.error('Ошибка при отправке сообщения пользователю:', err);
       ctx.reply('Не удалось отправить сообщение пользователю.');
@@ -137,9 +134,9 @@ bot.on('message', async (ctx) => {
 
   if (chatId !== parseInt(MODERATION_CHAT_ID)) {
     const username = from.username ? `@${from.username}` : '(без username)';
-    const questionText = `❓ *Вопрос от пользователя ${userId} ${username}:*\n${ctx.message.text}`;
+    const questionText = `❓ Вопрос от пользователя ${userId} ${username}:\n${ctx.message.text}`;
     try {
-      const sentMsg = await ctx.telegram.sendMessage(MODERATION_CHAT_ID, questionText, { parse_mode: 'Markdown' });
+      const sentMsg = await ctx.telegram.sendMessage(MODERATION_CHAT_ID, questionText);
       questionMap.set(sentMsg.message_id, { userId, username });
       await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, sentMsg.message_id, undefined, createReplyKeyboard(sentMsg.message_id));
       ctx.reply('Ваш вопрос отправлен модераторам. Ожидайте ответа.');
