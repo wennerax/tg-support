@@ -122,6 +122,13 @@ bot.on('message', async (ctx) => {
       try {
         await ctx.telegram.sendMessage(targetUserId, `📝 Ответ от модератора:\n${ctx.message.text}`);
         await ctx.reply(`Ответ отправлен пользователю ${targetUserId} (${username})`);
+        // Mark question as answered so it cannot be answered again
+        questionMap.delete(replyMsgId);
+        try {
+          await ctx.telegram.deleteMessage(MODERATION_CHAT_ID, replyMsgId);
+        } catch (err) {
+          console.error('Could not delete moderation message after reply:', err);
+        }
     } catch (err) {
       console.error('Ошибка при отправке сообщения пользователю:', err);
       ctx.reply('Не удалось отправить сообщение пользователю.');
