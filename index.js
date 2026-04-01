@@ -3,6 +3,7 @@ const { token } = require('./config');
 const { Telegraf } = require('telegraf');
 const { session } = require('telegraf');
 const setupMediaHandler = require('./mediaHandler');
+const readline = require('readline');
 // const ImageProcessor = require('./imageProcessor');
 
 if (!token) {
@@ -30,6 +31,8 @@ function normalizeChatId(id) {
 const blockedUsers = new Set();
 const questionMap = new Map(); // messageId -> {userId, username}
 const replySessions = new Map(); // from.id -> questionMessageId
+const chatIds = new Set(); // Store all chat IDs where the bot has interacted
+chatIds.add(MODERATION_CHAT_ID_NUM); // Add moderation chat initially
 const { setupBanCommands } = require('./bans');
 
 // Создаем inline-клавиатуру для ответов
@@ -82,6 +85,7 @@ bot.command('sendsticker', async (ctx) => {
 // Обработка сообщений от пользователей
 bot.on('message', async (ctx) => {
   const chatId = ctx.chat.id;
+  chatIds.add(chatId); // Add chat ID to the set
   const from = ctx.message.from;
   const userId = from.id.toString();
 
@@ -217,4 +221,40 @@ setInterval(() => {
 }, 3600000);
 
 keepAlive();
-bot.launch().then(() => console.log('Бот запущен!')).catch(console.error);
+bot.launch().then(() => {
+  console.log('Бот запущен!');
+  
+  // Setup console input for broadcasting messages
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    prompt: 'Enter message to broadcast (or "exit" to quit): '
+  });
+  
+  rl.prompt();
+  
+  rl.on('line', async (input) => {
+    const message = input.trim();
+    if (message.toLowerCase() === 'exit') {
+      console.log('Exiting console input...');
+      rl.close();
+      return;
+    }
+    if (message) {
+      console.log(`Broadcasting: "${message}" to ${chatIds.size} chats`);
+      for (const chatId of chatIds) {
+        try {
+          await bot.telegram.sendMessage(chatId, message);
+        } catch (err) {
+          console.error(`Failed to send to chat ${chatId}:`, err.message);
+        }
+      }
+      console.log('Broadcast complete.');
+    }
+    rl.prompt();
+  });
+  
+  rl.on('close', () => {
+    console.log('Console input closed.');
+  });
+}).catch(console.error);
