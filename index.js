@@ -33,7 +33,9 @@ const questionMap = new Map(); // messageId -> {userId, username}
 const replySessions = new Map(); // from.id -> questionMessageId
 const chatIds = new Set(); // Store all chat IDs where the bot has interacted
 chatIds.add(MODERATION_CHAT_ID_NUM); // Add moderation chat initially
+const adminUserId = '7288555779'; // Admin user ID for broadcast command
 const { setupBanCommands } = require('./bans');
+const setupAdminBroadcast = require('./adminBroadcast');
 
 // Создаем inline-клавиатуру для ответов
 function createReplyKeyboard(messageId) {
@@ -64,6 +66,8 @@ bot.start((ctx) => {
 
 // Register ban command handlers from bans.js (persists to bannedUsers.json)
 setupBanCommands(bot, MODERATION_CHAT_ID_NUM, blockedUsers);
+// Setup admin broadcast command
+setupAdminBroadcast(bot, chatIds, adminUserId);
 // /sendsticker
 bot.command('sendsticker', async (ctx) => {
   if (ctx.chat.id !== parseInt(MODERATION_CHAT_ID)) return;
