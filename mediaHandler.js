@@ -4,32 +4,55 @@
  */
 
 module.exports = function setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap, blockedUsers, createReplyKeyboard) {
-  // Handle all media types: photos, stickers, animations, videos, documents, audio, voice
   bot.on(['photo', 'sticker', 'animation', 'video', 'audio', 'voice', 'document'], async (ctx) => {
-    const chatId = ctx.chat.id;
-    const from = ctx.message.from;
-    const userId = from.id.toString();
+    const chatId = ctx.chat?.id;
+    const from = ctx.message?.from;
+    if (!chatId || !from) return;
 
-    // Moderator replying with media to a user
-    if (chatId === parseInt(MODERATION_CHAT_ID)) {
+    const userId = String(from.id);
+    const isModeratorChat = chatId === Number(MODERATION_CHAT_ID);
+
+    if (isModeratorChat) {
+      ctx.session = ctx.session || {};
       const replyMsgId = ctx.message.reply_to_message?.message_id;
-      
-      // Must be a reply to a tracked question
-      if (!replyMsgId || !questionMap.has(replyMsgId)) {
+      const hasTrackedQuestion = replyMsgId && questionMap.has(replyMsgId);
+
+      if (!hasTrackedQuestion && !ctx.session.activeReplySession) {
         await ctx.reply('Пожалуйста, отвечайте на сообщение, содержащее вопрос, используя reply.');
         return;
       }
 
-      const { userId: targetUserId, username } = questionMap.get(replyMsgId);
-      
       try {
-        // Copy the media message to the user
-        await ctx.telegram.copyMessage(targetUserId, MODERATION_CHAT_ID, ctx.message.message_id, {
-          caption: '📝 *Ответ от модератора*',
-          parse_mode: 'Markdown'
+        const target = ctx.session.activeReplySession
+          ? ctx.session.activeReplySession
+          : questionMap.get(replyMsgId);
+
+        if (!target || !target.userId) {
+          throw new Error('No reply target');
+        }
+
+        await ctx.telegram.copyMessage(target.userId, MODERATION_CHAT_ID, ctx.message.message_id, {
+          caption: '📝 Ответ от модератора'
         });
-        
-        await ctx.reply(`Медиа отправлены пользователю ${targetUserId} (${username})`);
+
+        await ctx.reply(`Медиа отправлены пользователю ${target.userId} (${target.username || ''})`);
+
+        if (ctx.session.activeReplySession) {
+          ctx.session.activeReplySession = null;
+          questionMap.delete(target.messageId);
+          try {
+            await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, target.messageId, undefined, undefined);
+          } catch (err) {
+            console.error('Could not edit moderation message after media reply:', err);
+          }
+        } else if (replyMsgId) {
+          questionMap.delete(replyMsgId);
+          try {
+            await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, replyMsgId, undefined, undefined);
+          } catch (err) {
+            console.error('Could not edit moderation message after media reply:', err);
+          }
+        }
       } catch (err) {
         console.error('Ошибка при отправке медиа пользователю:', err);
         await ctx.reply('Не удалось отправить медиа пользователю.');
@@ -37,33 +60,21 @@ module.exports = function setupMediaHandler(bot, MODERATION_CHAT_ID, questionMap
       return;
     }
 
-    // User sending media - check if user is blocked
     if (blockedUsers.has(userId)) return;
 
-    // Forward user's media to moderation chat
     const username = from.username ? `@${from.username}` : '(без username)';
-    const caption = ctx.message.caption 
-      ? `❓ *Медиа от пользователя ${userId} ${username}:*\n${ctx.message.caption}` 
-      : `❓ *Медиа от пользователя ${userId} ${username}*`;
+    const caption = ctx.message.caption
+      ? `❓ Медиа от пользователя ${userId} ${username}:\n${ctx.message.caption}`
+      : `❓ Медиа от пользователя ${userId} ${username}`;
 
     try {
-      // Copy media to moderation chat
       const copiedMsg = await ctx.telegram.copyMessage(MODERATION_CHAT_ID, chatId, ctx.message.message_id, {
-        caption,
-        parse_mode: 'Markdown'
+        caption
       });
 
-      // Track the question for reply functionality
-      if (copiedMsg) {
+      if (copiedMsg?.message_id) {
         questionMap.set(copiedMsg.message_id, { userId, username });
-        
-        // Add reply/reject buttons
-        await ctx.telegram.editMessageReplyMarkup(
-          MODERATION_CHAT_ID,
-          copiedMsg.message_id,
-          undefined,
-          createReplyKeyboard(copiedMsg.message_id)
-        );
+        await ctx.telegram.editMessageReplyMarkup(MODERATION_CHAT_ID, copiedMsg.message_id, undefined, createReplyKeyboard(copiedMsg.message_id));
       }
 
       ctx.reply('Ваше медиа отправлено модераторам. Ожидайте ответа.');
